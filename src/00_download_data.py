@@ -1,7 +1,8 @@
 import requests
 import os
 
-os.mkdir("data/")
+if not os.path.exists("data/"):
+    os.mkdir("data/")
 
 # URL des fichiers Parquet
 va_url = "https://data.education.gouv.fr/api/explore/v2.1/catalog/datasets/fr-en-indicateurs-de-resultat-des-lycees-gt_v2/exports/parquet?lang=fr&timezone=Europe%2FBerlin"
