@@ -1,4 +1,4 @@
 pandas
-request
+requests
 geopandas
 plotnine
