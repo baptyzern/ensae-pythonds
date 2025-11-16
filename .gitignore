@@ -1,2 +1,6 @@
+__pycache__/
+*.py[codz]
+*$py.class
+
 *.parquet
 *.csv
