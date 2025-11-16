@@ -23,7 +23,7 @@ def get_data_lycees():
     if not os.path.exists("data/lycees_geoloc.parquet"):
         download_parquet(url_lycees_geoloc, "data/lycees_geoloc.parquet")
 
-    lycees_resultats = pd.read_parquet("data/lycees_ips.parquet")
+    lycees_resultats = pd.read_parquet("data/lycees_resultats.parquet")
     lycees_ips = pd.read_parquet("data/lycees_ips.parquet")
     lycees_geoloc = gpd.read_parquet("data/lycees_geoloc.parquet")
 
