@@ -37,7 +37,7 @@ def get_data_lycees():
             # 'eff_2nde', 'eff_1ere', 'eff_term',
             # 'presents_total',
             # 'presents_l', 'presents_es', 'presents_s',
-            # 'presents_gnle',
+            'presents_gnle',
             # 'presents_sti2d', 'presents_std2a', 'presents_stmg', 'presents_stl'
             # 'presents_st2s', 'presents_s2tmd', 'presents_sthr',
             # 'nb_mentions_tb_avecf_g', 'nb_mentions_tb_sansf_g',
@@ -66,16 +66,17 @@ def get_data_lycees():
             # 'va_men_st2s', 'va_men_s2tmd', 'va_men_sthr'
         ]
         )
+
     lycees_ips = pd.read_parquet(
         path="data/lycees_ips.parquet",
         columns=[
             'uai', 'rentree_scolaire',
-            'nom_de_l_etablissement',
-            'secteur', 'type_de_lycee',
-            'code_region',  # 'region_academique',
-            'code_academie',  # 'academie',
-            'code_du_departement',  # 'departement',
-            'code_insee_de_la_commune',  # 'nom_de_la_commune',
+            # 'nom_de_l_etablissement',
+            # 'secteur', 'type_de_lycee',
+            # 'code_region', 'region_academique',
+            # 'code_academie', 'academie',
+            # 'code_du_departement', 'departement',
+            # 'code_insee_de_la_commune', 'nom_de_la_commune',
 
             'ips_voie_gt',
             # 'ips_voie_pro', 'ips_post_bac', 'ips_etab',
@@ -95,27 +96,31 @@ def get_data_lycees():
             # 'ips_departemental_lp_prive', 'ips_departemental_lp_public'
         ]
         )
+
     lycees_geoloc = gpd.read_parquet(
         path="data/lycees_geoloc.parquet",
         columns=[
             'numero_uai',
-            # 'appellation_officielle', 'denomination_principale', 'patronyme_uai',
-            # 'secteur_public_prive_libe',
+            'appellation_officielle',
+            # 'denomination_principale', 'patronyme_uai',
+            'secteur_public_prive_libe',
             # 'adresse_uai', 'lieu_dit_uai', 'boite_postale_uai', 'code_postal_uai',
             # 'localite_acheminement_uai',
-            # 'libelle_commune',
-
             # 'appariement', 'localisation',
             # 'nature_uai', 'nature_uai_libe',
             # 'etat_etablissement', 'etat_etablissement_libe',
-            # 'code_departement', 'code_region', 'code_academie', 'code_commune',
-            # 'libelle_departement', 'libelle_region', 'libelle_academie', 'position',
+            'code_departement', 'code_region', 'code_academie', 'code_commune',
+            'libelle_departement', 'libelle_region', 'libelle_academie', 'libelle_commune',
             # 'secteur_prive_code_type_contrat', 'secteur_prive_libelle_type_contrat',
             # 'code_ministere', 'libelle_ministere', 'date_ouverture', 'sigle', 'rnb'
             'coordonnee_x', 'coordonnee_y', 'epsg', 'latitude', 'longitude', 'position',
         ]
         )
-    lycees_geoloc = lycees_geoloc.rename(columns={'numero_uai': 'uai'})
+    lycees_geoloc = lycees_geoloc.rename(columns={
+        'numero_uai': 'uai',
+        'appellation_officielle': 'libelle_etablissement',
+        'secteur_public_prive_libe': 'secteur',
+        })
 
     # Restriction aux résultats de 2024 (année scolaire 2023-2024)
 
@@ -123,16 +128,18 @@ def get_data_lycees():
         annee=lycees_resultats['annee'].astype(str).str[0:4].astype(int)
     )
     lycees_resultats = lycees_resultats[lycees_resultats['annee'] == 2024]
-    lycees_resultats = lycees_resultats.sort_values(["uai"]).reset_index()
+    lycees_resultats = lycees_resultats.sort_values(["uai"])
+    lycees_resultats = lycees_resultats.reset_index().drop(columns='index')
 
     lycees_ips = lycees_ips.assign(
         annee=lycees_ips['rentree_scolaire'].str[5:9].astype(int)
     )
+    lycees_ips = lycees_ips.drop(columns="rentree_scolaire")
     lycees_ips = lycees_ips[lycees_ips['annee'] == 2024]
-    lycees_ips = lycees_ips.sort_values(["uai"]).reset_index()
+    lycees_ips = lycees_ips.sort_values(["uai"])
+    lycees_ips = lycees_ips.reset_index().drop(columns='index')
 
     # Merge des sources de données Résultats et IPS
-
     # La "bonne source" de données est celle des résultats
     # Elle concerne les lycées généraux (et technologiques), alors que
     # Dans la base IPS, il y a aussi les lycées uniquement professionnels
@@ -152,5 +159,31 @@ def get_data_lycees():
         how='inner'
     )
     # On perd 3 lycées (?)
+
+    # Changement des types des variables
+    lycees_data = lycees_data.assign(
+        presents_gnle=lycees_data['presents_gnle'].astype(float),
+        taux_reu_gnle=lycees_data['taux_reu_gnle'].astype(float),
+        va_reu_gnle=lycees_data['va_reu_gnle'].astype(float),
+        taux_men_gnle=lycees_data['taux_men_gnle'].astype(float),
+        va_men_gnle=lycees_data['va_men_gnle'].astype(float),
+        ips_voie_gt=lycees_data['ips_voie_gt'].astype(float),
+        ecart_type_voie_gt=lycees_data['ecart_type_voie_gt'].astype(float),
+    )
+
+    # Filtre pour sélectionner les lycées ayant suffisamment de candidats
+    seuil_effectifs = 40
+    lycees_data = lycees_data[lycees_data['presents_gnle'] >= seuil_effectifs]
+
+    # Filtre pour sélectionner les lycées situés dans l'Hexagone
+    regions_hors_hexagone = [
+        '00', '01', '02', '03', '04', '06',
+        '94'  # Corse
+        ]
+    lycees_data = lycees_data[~lycees_data['code_region'].isin(regions_hors_hexagone)]
+
+    # Re-conversion en gdf, et changement de CRS
+    lycees_data = gpd.GeoDataFrame(lycees_data, geometry='position', crs=lycees_geoloc.crs)
+    lycees_data = lycees_data.to_crs(epsg=2154)
 
     return lycees_data
