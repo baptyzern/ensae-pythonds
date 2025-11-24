@@ -1,5 +1,6 @@
-pandas
 requests
+pyarrow
+pandas
 geopandas
 plotnine
 folium
