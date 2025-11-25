@@ -97,21 +97,21 @@ class ModeleStatistique :
     - Sélection des variables : https://pythonds.linogaliana.fr/content/modelisation/4_featureselection.html
     - Régression : https://pythonds.linogaliana.fr/content/modelisation/3_regression.html
     """
-    def __init__(self , df , lycee_cols , ips , biblio_cols , cible):
+    def __init__(self , df , features , target):
         """
         df : DataFrame
         lycee_cols, ips, biblio_cols : listes de colonnes explicatives
         cible : nom de la variable cible
         """
-        self.lycee_cols = lycee_cols
-        self.ips = ips
-        self.biblio_cols = biblio_cols
+        self.lycee_cols = features["lycee_cols"]
+        self.ips = features["ips"]
+        self.biblio_cols = features["biblio_cols"]
         
         # Matrice X
-        self.X = df[lycee_cols + ips + biblio_cols].copy()
+        self.X = df[self.lycee_cols + self.ips + self.biblio_cols].copy()
         
         # Variable cible
-        self.y = df[cible].copy()
+        self.y = df[target].copy()
         
         # Ajout de la constante
         self.X = sm.add_constant(self.X)
