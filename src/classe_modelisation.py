@@ -11,10 +11,9 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 
 #La classe
-class Modelisation :
+class ModeleStatistique :
 
-
-        """
+    """
     Présentation générale
     --------------------
 
@@ -95,7 +94,6 @@ class Modelisation :
     - Sélection des variables : https://pythonds.linogaliana.fr/content/modelisation/4_featureselection.html
     - Régression : https://pythonds.linogaliana.fr/content/modelisation/3_regression.html
     """
-
     def __init__(self , df , lycee_cols , ips , biblio_cols , cible):
         """
         df : DataFrame
