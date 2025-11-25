@@ -84,11 +84,13 @@ class ModeleStatistique :
     - Modèle linéaire classique (OLS) : y = Xβ + ε, ε ~ N(0, σ^2 I_n)
     - Estimation robuste (HC0-HC3)
     - Régularisation (Lasso ou Ridge)
-
-    7. Diagnostic et validation (summarize & residuals_validation)
-    ------------------------------------------------------------
-    - Résumé complet (coefficients, erreurs-types, p-values, R², AIC, etc.)
-    - Analyse des résidus : normalité, tendances structurelles
+    7. Diagnostic, validation et prédiction (summarize, residuals_validation & predict)
+    -----------------------------------------------------------------------------------
+    - Résumé complet du modèle : coefficients, erreurs-types, p-values, R², AIC, etc. (`summarize`)
+    - Analyse des résidus : distribution, normalité, tendances structurelles (`residuals_validation`)
+    - Prédiction des nouvelles observations (`predict`) :
+        - Permet de prédire sur les données d’entraînement ou sur de nouvelles données.
+        - Peut retourner les valeurs exponentiées si la cible avait été log-transformée.
 
     Pour plus de détails sur les étapes : 
     - Prétraitement : https://pythonds.linogaliana.fr/content/modelisation/0_preprocessing.html
@@ -297,3 +299,41 @@ class ModeleStatistique :
         plt.show()
 
         return residuals
+
+        def predict(self, X_new=None, log_transform=False):
+            """
+            Prédit les valeurs pour de nouvelles données.
+            
+            X_new : DataFrame (optionnel)
+                Si None, utilise les données originales X_scaled.
+            log_transform : bool
+                Si True, retourne les prédictions exponentiées si la cible avait été log-transformée.
+            """
+            if self.model is None:
+                raise ValueError("Lance Model() d'abord.")
+            
+            if X_new is None:
+                X_new_scaled = self.X_scaled
+            else:
+                # Si nouvelles données, appliquer même preprocessing que sur le training set
+                dummies_new = pd.get_dummies(X_new, drop_first=True)
+                # Conserver uniquement les colonnes présentes dans le modèle
+                missing_cols = set(self.X_scaled.columns) - set(dummies_new.columns)
+                for col in missing_cols:
+                    dummies_new[col] = 0
+                dummies_new = dummies_new[self.X_scaled.columns]  # ordre identique
+                # Standardisation
+                num_cols = dummies_new.select_dtypes(include=np.number).columns
+                dummies_new[num_cols] = self.scaler.transform(dummies_new[num_cols])
+                X_new_scaled = dummies_new
+
+            # Ajout constante si nécessaire
+            if 'const' not in X_new_scaled.columns:
+                X_new_scaled = sm.add_constant(X_new_scaled)
+
+            y_pred = self.model.predict(X_new_scaled)
+
+            if log_transform and self.log_y is not None:
+                y_pred = np.exp(y_pred)
+
+            return y_pred
