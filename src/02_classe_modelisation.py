@@ -12,6 +12,90 @@ import seaborn as sns
 
 #La classe
 class Modelisation :
+
+
+        """
+    Présentation générale
+    --------------------
+
+    Ce module implémente une classe Python dédiée à la modélisation statistique flexible,
+    inspirée des travaux de Lino Galiana et Alexandre Dore. 
+    Cette approche, structurée, reproductible et centrée sur les bonnes pratiques
+    en science des données, sert de fil conducteur à l’ensemble du travail.
+
+    Objectifs
+    ---------
+    - Préparer et transformer les données
+    - Sélectionner les variables pertinentes
+    - Estimer le modèle (OLS, Lasso, Ridge)
+    - Valider statistiquement et diagnostiquer les résidus
+
+    Pour plus de détails, consulter :
+    - https://pythonds.linogaliana.fr
+    - https://doi.org/10.5281/zenodo.8229676
+
+    Méthodes principales
+    -------------------
+
+    1. Initialisation (__init__)
+    ------------------------
+    Crée la structure de base du modèle, prend en entrée :
+    - la base de données,
+    - les ensembles de variables explicatives,
+    - la variable cible.
+    Pose les fondations du pipeline de modélisation.
+
+    2. Prétraitement des variables (preprocessing_features)
+    -----------------------------------------------------
+    Standardise et prépare les données :
+    - Transformation logarithmique de la cible (si cible_transform="log") :
+        y_trans = log(y) ou y sinon
+    - Création de variables indicatrices (one-hot)
+    - Standardisation des variables numériques :
+        x_j_scaled = (x_j - μ_j) / σ_j
+
+    3. Sélection des variables explicatives (features_selection)
+    ----------------------------------------------------------
+    Sélection automatique via Lasso :
+    Minimisation : 
+        hat{β}^Lasso = argmin_beta { (1/2n)||y-Xβ||_2^2 + λ||β||_1 }
+    - y ∈ ℝ^n : variable cible
+    - X ∈ ℝ^{n×p} : variables explicatives prétraitées
+    - λ > 0 : paramètre de régularisation
+    Les variables dont β_j = 0 sont éliminées.
+
+    4. Visualisation de l’importance des variables (features_viz)
+    -----------------------------------------------------------
+    Affiche les coefficients estimés par le Lasso :
+    - valeurs positives/négatives
+    - variables éliminées (β_j = 0)
+    Utile pour communiquer les résultats et valider l’intelligibilité.
+
+    5. Choix du paramètre de régularisation (penalization_choice_curve)
+    ----------------------------------------------------------------
+    Reproduit la courbe de validation croisée pour différentes λ :
+    - Lasso (L1) : hat{β}(λ) = argmin_beta { (1/2n)||y-Xβ||_2^2 + λ||β||_1 }
+    - Ridge (L2) : hat{β}(λ) = argmin_beta { (1/2n)||y-Xβ||_2^2 + λ||β||_2^2 }
+    Affiche le MSE moyen par fold pour choisir λ optimal.
+
+    6. Ajustement du modèle final (Model)
+    -----------------------------------
+    Options :
+    - Modèle linéaire classique (OLS) : y = Xβ + ε, ε ~ N(0, σ^2 I_n)
+    - Estimation robuste (HC0-HC3)
+    - Régularisation (Lasso ou Ridge)
+
+    7. Diagnostic et validation (summarize & residuals_validation)
+    ------------------------------------------------------------
+    - Résumé complet (coefficients, erreurs-types, p-values, R², AIC, etc.)
+    - Analyse des résidus : normalité, tendances structurelles
+
+    Pour plus de détails sur les étapes : 
+    - Prétraitement : https://pythonds.linogaliana.fr/content/modelisation/0_preprocessing.html
+    - Sélection des variables : https://pythonds.linogaliana.fr/content/modelisation/4_featureselection.html
+    - Régression : https://pythonds.linogaliana.fr/content/modelisation/3_regression.html
+    """
+
     def __init__(self , df , lycee_cols , ips , biblio_cols , cible):
         """
         df : DataFrame
