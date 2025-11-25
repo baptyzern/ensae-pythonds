@@ -1,2 +1,10 @@
+__pycache__/
+*.py[codz]
+*$py.class
+
 *.parquet
 *.csv
+*.geojson
+*.json
+*.png
+*.svg
