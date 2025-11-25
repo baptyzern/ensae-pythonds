@@ -11,8 +11,9 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 
 #La classe
-class ModeleStatistique :
 
+
+class ModeleStatistique :
     """
     Présentation générale
     --------------------
