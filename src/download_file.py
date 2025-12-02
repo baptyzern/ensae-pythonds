@@ -1,7 +1,7 @@
 import requests
 
 
-def download_parquet(url, filename):
+def download_file(url, filename):
     print(f"Téléchargement de {filename}")
     response = requests.get(url)
     with open(filename, 'wb') as f:
