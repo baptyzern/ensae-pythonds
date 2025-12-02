@@ -81,10 +81,11 @@ def get_data_biblio():
     biblio_data = gpd.GeoDataFrame(
         data=df,
         geometry=gpd.points_from_xy(
-            x=df['ADRES_LATITUDE'],
-            y=df['ADRES_LONGITUDE'],
-            crs="EPSG:2154"
+            x=df['ADRES_LONGITUDE'],
+            y=df['ADRES_LATITUDE'],
+            crs="WGS 84"
         )
     )
+    biblio_data = biblio_data.to_crs(epsg=2154)
 
     return biblio_data
