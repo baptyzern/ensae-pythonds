@@ -4,5 +4,3 @@ pandas
 geopandas
 plotnine
 folium
-re
-xml
