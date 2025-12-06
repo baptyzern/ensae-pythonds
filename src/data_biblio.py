@@ -32,11 +32,11 @@ def extraire_xml_biblio(file):
 
         temp = {}
 
-        temp["NOMETABLISSEMENT"] = get_xml_value(fields, "DID_SEL/NOMETABLISSEMENT")
-        temp["ADRES_PAYS"] = get_xml_value(fields, "ADRESSES_SEL/ADRESSE_SET/ADRES_PAYS")
-        temp["ADRES_CODEPOSTAL"] = get_xml_value(fields, "ADRESSES_SEL/ADRESSE_SET/ADRES_CODEPOSTAL")
-        temp["ADRES_LATITUDE"] = get_xml_value(fields, "ADRESSES_SEL/ADRESSE_SET/ADRES_LATITUDE")
-        temp["ADRES_LONGITUDE"] = get_xml_value(fields, "ADRESSES_SEL/ADRESSE_SET/ADRES_LONGITUDE")
+        temp["NOMETAB"] = get_xml_value(fields, "DID_SEL/NOMETABLISSEMENT")
+        temp["PAYS"] = get_xml_value(fields, "ADRESSES_SEL/ADRESSE_SET/ADRES_PAYS")
+        temp["CODEPOSTAL"] = get_xml_value(fields, "ADRESSES_SEL/ADRESSE_SET/ADRES_CODEPOSTAL")
+        temp["LATITUDE"] = get_xml_value(fields, "ADRESSES_SEL/ADRESSE_SET/ADRES_LATITUDE")
+        temp["LONGITUDE"] = get_xml_value(fields, "ADRESSES_SEL/ADRESSE_SET/ADRES_LONGITUDE")
         # temp["HEURESOUVERTURE"] = get_xml_value(fields, "ACCES_SEL/HEURESOUVERTURE")
 
         # temp["CONDITIONACCES"] = get_xml_value(fields, "ACCES_SEL/CONDITIONACCES")
@@ -72,17 +72,23 @@ def get_data_biblio():
     df = extraire_xml_biblio("data/ccfr_biblio.xml")
 
     # Mettre en forme les latitudes et longitudes
-    df['ADRES_LATITUDE'] = df['ADRES_LATITUDE'].str.replace(r'[^\d.]', '', regex=True)
-    df['ADRES_LATITUDE'] = pd.to_numeric(df['ADRES_LATITUDE'])
-    df['ADRES_LONGITUDE'] = df['ADRES_LONGITUDE'].str.replace(r'[^\d.]', '', regex=True)
-    df['ADRES_LONGITUDE'] = pd.to_numeric(df['ADRES_LONGITUDE'])
+    df['LATITUDE'] = df['LATITUDE'].str.replace(r'[^\d.]', '', regex=True)
+    df['LATITUDE'] = pd.to_numeric(df['LATITUDE'])
+    df['LONGITUDE'] = df['LONGITUDE'].str.replace(r'[^\d.]', '', regex=True)
+    df['LONGITUDE'] = pd.to_numeric(df['LONGITUDE'])
+
+    # Nettoyer les données pour ne garder que les bibliothèques dans l'Hexagone hors Corse
+    df = df.dropna(subset=['LATITUDE'])
+    df = df.dropna(subset=['LONGITUDE'])
+    df = df[df['PAYS'].isin(["FR", 'fr'])]
+    df = df[~df['CODEPOSTAL'].str[0:2].isin(["20", "97", "98"])]
 
     # Convertir en GeoDataFrame
     biblio_data = gpd.GeoDataFrame(
         data=df,
         geometry=gpd.points_from_xy(
-            x=df['ADRES_LONGITUDE'],
-            y=df['ADRES_LATITUDE'],
+            x=df['LONGITUDE'],
+            y=df['LATITUDE'],
             crs="WGS 84"
         )
     )
