@@ -72,9 +72,9 @@ def get_data_biblio():
     df = extraire_xml_biblio("data/ccfr_biblio.xml")
 
     # Mettre en forme les latitudes et longitudes
-    df['LATITUDE'] = df['LATITUDE'].str.replace(r'[^\d.]', '', regex=True)
+    df['LATITUDE'] = df['LATITUDE'].str.replace(r'[^\d.-]', '', regex=True)
     df['LATITUDE'] = pd.to_numeric(df['LATITUDE'])
-    df['LONGITUDE'] = df['LONGITUDE'].str.replace(r'[^\d.]', '', regex=True)
+    df['LONGITUDE'] = df['LONGITUDE'].str.replace(r'[^\d.-]', '', regex=True)
     df['LONGITUDE'] = pd.to_numeric(df['LONGITUDE'])
 
     # Nettoyer les données pour ne garder que les bibliothèques dans l'Hexagone hors Corse
