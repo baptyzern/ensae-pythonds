@@ -175,7 +175,42 @@ def get_data_lycees():
     annuaire_education = annuaire_education.drop(columns='is_annexe')
 
     # Certains établissements sont en double (car rattaché à plusieurs communes qui ont fusionné)
-    annuaire_education = annuaire_education.groupby('uai').first()
+    annuaire_education = annuaire_education.groupby('uai').first().reset_index()
+
+    # Rajout de l'information sur la densité de la commune
+    commune_url = "https://object.files.data.gouv.fr/hydra-parquet/hydra-parquet/1f4841ac6cc0313803cabfa2c7ca4d37.parquet"
+
+    if not os.path.exists("data/annuaire_communes.parquet"):
+        download_file(commune_url, "data/annuaire_communes.parquet")
+    annuaire_communes = pd.read_parquet(
+        'data/annuaire_communes.parquet',
+        columns=[
+            # 'Unnamed: 0',
+            'code_insee',
+            # 'nom_standard', 'nom_sans_pronom', 'nom_a', 'nom_de',
+            # 'nom_sans_accent', 'nom_standard_majuscule', 'typecom', 'typecom_texte', 'reg_code',
+            # 'reg_nom', 'dep_code', 'dep_nom', 'canton_code', 'canton_nom', 'epci_code', 'epci_nom',
+            # 'academie_code', 'academie_nom', 'code_postal', 'codes_postaux', 'zone_emploi',
+            # 'code_insee_centre_zone_emploi', 'code_unite_urbaine', 'nom_unite_urbaine',
+            # 'taille_unite_urbaine', 'type_commune_unite_urbaine', 'statut_commune_unite_urbaine',
+            # 'population', 'superficie_hectare', 'superficie_km2', 'densite', 'altitude_moyenne',
+            # 'altitude_minimale', 'altitude_maximale', 'latitude_mairie', 'longitude_mairie',
+            # 'latitude_centre', 'longitude_centre',
+            'grille_densite', 'grille_densite_texte',
+            # 'niveau_equipements_services', 'niveau_equipements_services_texte', 'gentile',
+            # 'url_wikipedia', 'url_villedereve'
+            ]
+        )
+
+    annuaire_communes = annuaire_communes.rename(columns={
+        'code_insee': 'code_commune',
+        })
+
+    annuaire_education = annuaire_education.merge(
+        annuaire_communes,
+        on='code_commune',
+        how='inner'
+    )
 
     # Perte du CRS avec le groupby.first (bug ?)
     annuaire_education.crs = annuaire_crs
