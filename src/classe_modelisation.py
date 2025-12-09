@@ -14,7 +14,7 @@ import seaborn as sns
 
 
 class pipeline_modelisation :
-    
+
     """
     Présentation générale
     --------------------
@@ -115,7 +115,6 @@ class pipeline_modelisation :
         self.y = df[target].copy()
         
         # Ajout de la constante
-        self.X = sm.add_constant(self.X)
 
         # Objets techniques
         self.log_y = None
@@ -150,6 +149,7 @@ class pipeline_modelisation :
         self.scaler = StandardScaler()
         self.X_scaled = self.dummies.copy()
         self.X_scaled[num_cols] = self.scaler.fit_transform(self.dummies[num_cols])
+        self.X_scaled = sm.add_constant(self.X_scaled)
 
         return self.X_scaled, self.log_y
 
