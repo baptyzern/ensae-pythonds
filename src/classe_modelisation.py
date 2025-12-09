@@ -149,7 +149,6 @@ class pipeline_modelisation :
         self.scaler = StandardScaler()
         self.X_scaled = self.dummies.copy()
         self.X_scaled[num_cols] = self.scaler.fit_transform(self.dummies[num_cols])
-        self.X_scaled = sm.add_constant(self.X_scaled)
 
         return self.X_scaled, self.log_y
 
