@@ -13,7 +13,8 @@ import seaborn as sns
 #La classe
 
 
-class ModeleStatistique :
+class pipeline_modelisation :
+    
     """
     Présentation générale
     --------------------
@@ -238,7 +239,7 @@ class ModeleStatistique :
         print(f"Meilleur lambda trouvé : {best_lambda:.5f} (MSE minimum = {mean_mse.min():.5f})")
         return best_lambda
 
-    def Model(self, specify="ols_linear_regression", robust="False", penalization="None", best_lambda=1.0):
+    def fit(self, specify="ols_linear_regression", robust="False", penalization="None", best_lambda=1.0):
         """
         Construction du modèle OLS StatsModels avec options :
         - robuste (HC0, HC1, HC2, HC3)
