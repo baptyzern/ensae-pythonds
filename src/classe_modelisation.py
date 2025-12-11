@@ -14,7 +14,7 @@ import seaborn as sns
 
 
 class pipeline_modelisation :
-    
+
     """
     Présentation générale
     --------------------
@@ -115,7 +115,6 @@ class pipeline_modelisation :
         self.y = df[target].copy()
         
         # Ajout de la constante
-        self.X = sm.add_constant(self.X)
 
         # Objets techniques
         self.log_y = None
@@ -250,9 +249,9 @@ class pipeline_modelisation :
             raise ValueError("Modèle non reconnu")
         
         # Variables retenues après sélection
-        selected = getattr(self, "selected_features", self.X_scaled.columns)
-        X_for_model = sm.add_constant(self.X_scaled[selected])
-        y_for_model = self.log_y if self.log_y is not None else self.y
+        X_for_model = self.X_scaled.copy()
+        X_for_model = X_for_model.astype({col: "int" for col in X_for_model.select_dtypes("bool").columns})
+        X_for_model = sm.add_constant(X_for_model[selected])
 
         # OLS classique ou robuste
         if penalization == "None":
