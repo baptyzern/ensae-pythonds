@@ -1,339 +1,550 @@
-#les librairies
-
 import numpy as np
 import pandas as pd
-import statsmodels.api as sm
-from sklearn.preprocessing import StandardScaler
-from sklearn.linear_model import LassoCV
-from sklearn.model_selection import KFold
-from sklearn.metrics import mean_squared_error
+import statsmodels.formula.api as smf
 import matplotlib.pyplot as plt
 import seaborn as sns
+from sklearn.preprocessing import StandardScaler
+from typing import List, Optional, Union, Dict, Any
+import warnings
 
-#La classe
-
-
-class pipeline_modelisation :
-
+class PipelineRegression:
     """
-    Présentation générale
-    --------------------
-
-    Ce module implémente une classe Python dédiée à la modélisation statistique flexible,
-    inspirée des travaux de Lino Galiana et Alexandre Dore. 
-    Cette approche, structurée, reproductible et centrée sur les bonnes pratiques
-    en science des données, sert de fil conducteur à l’ensemble du travail.
-
-    Objectifs
+    Pipeline de modélisation de régression linéaire avec visualisations avancées.
+    
+    Cette classe implémente une approche structurée et reproductible pour la
+    modélisation statistique, inspirée des bonnes pratiques en science des données.
+    
+    Attributs
     ---------
-    - Préparer et transformer les données
-    - Sélectionner les variables pertinentes
-    - Estimer le modèle (OLS, Lasso, Ridge)
-    - Valider statistiquement et diagnostiquer les résidus
-
-    Pour plus de détails, consulter :
+    X : array-like
+        Variables explicatives standardisées
+    y : array-like
+        Variable cible
+    model : statsmodels.regression.linear_model.RegressionResultsWrapper
+        Modèle statistique ajusté
+    scaler : StandardScaler
+        Standardiseur pour les variables explicatives
+    standardisation : bool
+        Indicateur de standardisation des données
+    
+    Références (Travaux de Lino Galiana)
+    ------------------------------------
     - https://pythonds.linogaliana.fr
     - https://doi.org/10.5281/zenodo.8229676
-
-    Méthodes principales
-    -------------------
-
-    1. Initialisation (__init__)
-    ------------------------
-    Crée la structure de base du modèle, prend en entrée :
-    - la base de données,
-    - les ensembles de variables explicatives,
-    - la variable cible.
-    Pose les fondations du pipeline de modélisation.
-
-    2. Prétraitement des variables (preprocessing_features)
-    -----------------------------------------------------
-    Standardise et prépare les données :
-    - Transformation logarithmique de la cible (si cible_transform="log") :
-        y_trans = log(y) ou y sinon
-    - Création de variables indicatrices (one-hot)
-    - Standardisation des variables numériques :
-        x_j_scaled = (x_j - μ_j) / σ_j
-
-    3. Sélection des variables explicatives (features_selection)
-    ----------------------------------------------------------
-    Sélection automatique via Lasso :
-    Minimisation : 
-        hat{β}^Lasso = argmin_beta { (1/2n)||y-Xβ||_2^2 + λ||β||_1 }
-    - y ∈ ℝ^n : variable cible
-    - X ∈ ℝ^{n×p} : variables explicatives prétraitées
-    - λ > 0 : paramètre de régularisation
-    Les variables dont β_j = 0 sont éliminées.
-
-    4. Visualisation de l’importance des variables (features_viz)
-    -----------------------------------------------------------
-    Affiche les coefficients estimés par le Lasso :
-    - valeurs positives/négatives
-    - variables éliminées (β_j = 0)
-    Utile pour communiquer les résultats et valider l’intelligibilité.
-
-    5. Choix du paramètre de régularisation (penalization_choice_curve)
-    ----------------------------------------------------------------
-    Reproduit la courbe de validation croisée pour différentes λ :
-    - Lasso (L1) : hat{β}(λ) = argmin_beta { (1/2n)||y-Xβ||_2^2 + λ||β||_1 }
-    - Ridge (L2) : hat{β}(λ) = argmin_beta { (1/2n)||y-Xβ||_2^2 + λ||β||_2^2 }
-    Affiche le MSE moyen par fold pour choisir λ optimal.
-
-    6. Ajustement du modèle final (Model)
-    -----------------------------------
-    Options :
-    - Modèle linéaire classique (OLS) : y = Xβ + ε, ε ~ N(0, σ^2 I_n)
-    - Estimation robuste (HC0-HC3)
-    - Régularisation (Lasso ou Ridge)
-    7. Diagnostic, validation et prédiction (summarize, residuals_validation & predict)
-    -----------------------------------------------------------------------------------
-    - Résumé complet du modèle : coefficients, erreurs-types, p-values, R², AIC, etc. (`summarize`)
-    - Analyse des résidus : distribution, normalité, tendances structurelles (`residuals_validation`)
-    - Prédiction des nouvelles observations (`predict`) :
-        - Permet de prédire sur les données d’entraînement ou sur de nouvelles données.
-        - Peut retourner les valeurs exponentiées si la cible avait été log-transformée.
-
-    Pour plus de détails sur les étapes : 
-    - Prétraitement : https://pythonds.linogaliana.fr/content/modelisation/0_preprocessing.html
-    - Sélection des variables : https://pythonds.linogaliana.fr/content/modelisation/4_featureselection.html
-    - Régression : https://pythonds.linogaliana.fr/content/modelisation/3_regression.html
     """
-    def __init__(self , df , features , target):
-        """
-        df : DataFrame
-        lycee_cols, ips, biblio_cols : listes de colonnes explicatives
-        cible : nom de la variable cible
-        """
-        self.lycee_cols = features["lycee_cols"]
-        self.ips = features["ips"]
-        self.biblio_cols = features["biblio_cols"]
-        
-        # Matrice X
-        self.X = df[self.lycee_cols + self.ips + self.biblio_cols].copy()
-        
-        # Variable cible
-        self.y = df[target].copy()
-        
-        # Ajout de la constante
-
-        # Objets techniques
-        self.log_y = None
-        self.dummies = None
-        self.scaler = None
-        self.X_scaled = None
-        self.model = None
-
-    def get_features(self):
-        return (self.X , self.y)
     
-    def preprocessing_features(self, cible_transform="none"):
-
-        """
-        - cible_transform : "none" ou "log"
-        - création de dummies
-        - standardisation des colonnes numériques
-        """
-
-        # Transformation de la cible
-
-        if cible_transform.lower() == "log":
-            self.log_y = np.log(self.y)
-        else:
-            self.log_y = self.y.copy()
-        
-        # Dummy encoding
-        self.dummies = pd.get_dummies(self.X, drop_first=True)
-
-        # Standardisation
-        num_cols = self.dummies.select_dtypes(include=np.number).columns
+    def __init__(self):
+        """Initialise le pipeline de régression."""
+        self.X = None
+        self.y = None
+        self.standardisation = False
+        self.model = None
         self.scaler = StandardScaler()
-        self.X_scaled = self.dummies.copy()
-        self.X_scaled[num_cols] = self.scaler.fit_transform(self.dummies[num_cols])
-
-        return self.X_scaled, self.log_y
-
-
-    def features_selection(self, by="lasso"):
-        """
-        Sélection par LassoCV (automatique)
-        """
-        if self.X_scaled is None:
-            raise ValueError("Lance d'abord preprocessing_features()")
-
-        if by == "lasso":
-            lasso = LassoCV(cv=5, random_state=123).fit(self.X_scaled, self.log_y)
-            coef = pd.Series(lasso.coef_, index=self.X_scaled.columns)
-            self.selected_features = coef[coef != 0].index.tolist()
-            return self.selected_features
+        self.feature_names = None
+        self.target_name = None
         
-        else:
-            raise ValueError("Méthode non supportée : choisis 'lasso'")
-
-    def features_viz(self):
+        # Configuration globale des styles
+        plt.style.use('seaborn-v0_8-whitegrid')
+        self.colors = {
+            'primary': '#2E86AB',
+            'secondary': '#A23B72',
+            'accent': '#F18F01',
+            'dark': '#2D3047',
+            'light': '#C5C5C5'
+        }
+    
+    def data_standardisation(self, data: pd.DataFrame, 
+                            numerical_features: List[str]) -> pd.DataFrame:
         """
-        Visualisation des coefficients Lasso
+        Standardise les caractéristiques numériques.
+        
+        Paramètres
+        ----------
+        data : pd.DataFrame
+            DataFrame contenant les données
+        numerical_features : List[str]
+            Liste des caractéristiques numériques à standardiser
+            
+        Retourne
+        -------
+        pd.DataFrame
+            DataFrame avec les caractéristiques standardisées
         """
-        if not hasattr(self, 'selected_features'):
-            raise ValueError("Lance features_selection()")
-
-        coef = pd.Series(
-            np.zeros(len(self.X_scaled.columns)),
-            index=self.X_scaled.columns
+        if not numerical_features:
+            return data
+        
+        data_standardized = data.copy()
+        data_standardized[numerical_features] = self.scaler.fit_transform(
+            data[numerical_features]
         )
-        # Remplace par coefficients non nuls
-        lasso = LassoCV(cv=5).fit(self.X_scaled, self.log_y)
-        coef = pd.Series(lasso.coef_, index=self.X_scaled.columns)
-
-        coef.sort_values().plot(kind="barh", figsize=(8,12))
-        plt.title("Importance des features (Lasso)")
-        plt.show()
-
-    def penalization_choice_curve(self, penalization="Lasso", lambdas=None, cv=5):
-
+        return data_standardized
+    
+    def heatmap_matrix(self, data: pd.DataFrame, 
+                       features: List[str], 
+                       target: str,
+                       figsize: tuple = (10, 8),
+                       annot: bool = True) -> plt.Figure:
         """
-        Choix de la régularisation par cross-validation.
-        Trace la courbe log(lambda) vs MSE moyen CV.
+        Génère une heatmap matricielle de corrélations.
         
-        penalization : Lasso ou Ridge
-        lambdas : liste ou array de valeurs de régularisation
-        cv : nombre de folds pour la CV
+        Paramètres
+        ----------
+        data : pd.DataFrame
+            Données d'entrée
+        features : List[str]
+            Liste des caractéristiques
+        target : str
+            Variable cible
+        standardisation : bool
+            Si True, standardise les caractéristiques numériques
+        figsize : tuple
+            Dimensions de la figure
+        annot : bool
+            Si True, affiche les valeurs dans les cellules
+            
+        Retourne
+        -------
+        plt.Figure
+            Figure matplotlib
         """
+        # Préparation des données
 
-        if lambdas is None:
-            lambdas = np.logspace(-4, 2, 30)  # valeurs par défaut
-
-        selected = getattr(self, "selected_features", self.X_scaled.columns)
-        X = sm.add_constant(self.X_scaled[selected]).values
-        y = self.log_y.values if self.log_y is not None else self.y.values
-
-        mean_mse = []
-
-        kf = KFold(n_splits=cv, shuffle=True, random_state=42)
-
-        for lam in lambdas:
-            fold_mse = []
-            for train_idx, test_idx in kf.split(X):
-                X_train, X_test = X[train_idx], X[test_idx]
-                y_train, y_test = y[train_idx], y[test_idx]
-
-                L1_wt = 1.0 if penalization == "Lasso" else 0.0
-                model = sm.OLS(y_train, X_train).fit_regularized(L1_wt=L1_wt, alpha=lam)
-                y_pred = np.dot(X_test, model.params)
-                fold_mse.append(mean_squared_error(y_test, y_pred))
-            mean_mse.append(np.mean(fold_mse))
-
-        mean_mse = np.array(mean_mse)
-
-        # Plot log(lambda) vs MSE
-        plt.figure(figsize=(8,5))
-        plt.plot(np.log10(lambdas), mean_mse, marker='o')
-        plt.xlabel("log10(lambda)")
-        plt.ylabel("MSE moyen CV")
-        plt.title(f"Choix de lambda par CV ({penalization})")
-        plt.grid(True)
-        plt.show()
-
-        # Meilleur lambda
-        best_lambda = lambdas[np.argmin(mean_mse)]
-        print(f"Meilleur lambda trouvé : {best_lambda:.5f} (MSE minimum = {mean_mse.min():.5f})")
-        return best_lambda
-
-    def fit(self, specify="ols_linear_regression", robust="False", penalization="None", best_lambda=1.0):
-        """
-        Construction du modèle OLS StatsModels avec options :
-        - robuste (HC0, HC1, HC2, HC3)
-        - pénalisation Lasso (L1) ou Ridge (L2) via fit_regularized
-        alpha : force de régularisation pour Lasso/Ridge
-        """
-        if specify != "ols_linear_regression":
-            raise ValueError("Modèle non reconnu")
+        data_processed = data.copy()
         
-        # Variables retenues après sélection
-        X_for_model = self.X_scaled.copy()
-        X_for_model = X_for_model.astype({col: "int" for col in X_for_model.select_dtypes("bool").columns})
-        X_for_model = sm.add_constant(X_for_model[selected])
-
-        # OLS classique ou robuste
-        if penalization == "None":
-            ols_model = sm.OLS(y_for_model, X_for_model)
-            if robust == "False":
-                self.model = ols_model.fit()
-            else:
-                self.model = ols_model.fit(cov_type=robust)
-
-        # Pénalisation via fit_regularized
-        elif penalization in ["Lasso", "Ridge"]:
-            if penalization == "Lasso":
-                L1_wt = 1.0  # L1 complète → Lasso
-            else:
-                L1_wt = 0.0  # L2 complète → Ridge
-            self.model = sm.OLS(y_for_model, X_for_model).fit_regularized(L1_wt=L1_wt, alpha = best_lambda)
+        # Sélection et calcul des corrélations
+        numerical_features = [f for f in features if data[f].dtype in ['int64', 'float64']]
+        selected_features = numerical_features + [target]
+        corr_matrix = data_processed[selected_features].corr()
         
-        else:
-            raise ValueError("Choix de pénalisation non reconnu : 'None', 'Lasso', 'Ridge'")
-
-        return self.model
-
-    def summarize(self):
-        if self.model is None:
-            raise ValueError("Lance Model() d'abord.")
-        print(self.model.summary())
-
-    def residuals_validation(self):
-        if self.model is None:
-            raise ValueError("Lance Model() d’abord")
+        # Création de la figure
+        fig, ax = plt.subplots(figsize=figsize)
         
-        residuals = self.model.resid
-
-        fig, axes = plt.subplots(1,2, figsize=(12,5))
-
-        # Distribution
-        sns.histplot(residuals, kde=True, ax=axes[0])
-        axes[0].set_title("Distribution des résidus")
-
-        # QQplot
-        sm.qqplot(residuals, line='45', ax=axes[1])
-        axes[1].set_title("QQ-plot des résidus")
-
+        # Masque pour le triangle supérieur
+        mask = np.triu(np.ones_like(corr_matrix, dtype=bool))
+        
+        # Heatmap
+        sns.heatmap(corr_matrix,
+                   mask=mask,
+                   annot=annot,
+                   fmt='.2f',
+                   cmap='RdBu_r',
+                   center=0,
+                   square=True,
+                   linewidths=0.5,
+                   cbar_kws={"shrink": 0.8},
+                   ax=ax)
+        
+        # Personnalisation
+        ax.set_title('Matrice de Corrélation', 
+                    fontsize=16, 
+                    fontweight='bold',
+                    pad=20)
+        ax.tick_params(axis='both', which='major', labelsize=10)
+        
+        # Rotation des étiquettes
+        plt.xticks(rotation=45, ha='right')
+        plt.yticks(rotation=0)
+        
         plt.tight_layout()
-        plt.show()
-
-        return residuals
-
-        def predict(self, X_new=None, log_transform=False):
-            """
-            Prédit les valeurs pour de nouvelles données.
+        return fig
+    
+    def paires_plot(self, data: pd.DataFrame,
+                   features: List[str],
+                   target: str,
+                   figsize: tuple = (12, 10)) -> plt.Figure:
+        """
+        Génère un pair plot des caractéristiques avec la variable cible.
+        
+        Paramètres
+        ----------
+        data : pd.DataFrame
+            Données d'entrée
+        features : List[str]
+            Liste des caractéristiques
+        target : str
+            Variable cible
+        standardisation : bool
+            Si True, standardise les caractéristiques numériques
+        figsize : tuple
+            Dimensions de la figure
             
-            X_new : DataFrame (optionnel)
-                Si None, utilise les données originales X_scaled.
-            log_transform : bool
-                Si True, retourne les prédictions exponentiées si la cible avait été log-transformée.
-            """
-            if self.model is None:
-                raise ValueError("Lance Model() d'abord.")
-            
-            if X_new is None:
-                X_new_scaled = self.X_scaled
+        Retourne
+        -------
+        plt.Figure
+            Figure matplotlib
+        """
+        # Préparation des données
+
+        data_processed = data.copy()
+        
+        # Limiter le nombre de caractéristiques pour la lisibilité
+        if len(features) > 6:
+            warnings.warn(f"Le pair plot avec {len(features)} caractéristiques peut être illisible. "
+                         "Considérez-en utiliser moins.")
+            features = features[:6]
+        
+        # Création du pair plot
+        plot_data = data_processed[features + [target]]
+        
+        # Création de la figure
+        fig = plt.figure(figsize=figsize)
+        
+        # Création de la grille
+        n_features = len(features)
+        # Calcul de la hauteur par sous-graphique
+        height_per_subplot = figsize[0] / max(n_features, 1)
+        
+        # Vérifier si la cible est catégorielle pour décider d'utiliser hue
+        if plot_data[target].dtype == 'object' or plot_data[target].nunique() < 10:
+            g = sns.PairGrid(plot_data, 
+                            hue=target,
+                            diag_sharey=False,
+                            height=height_per_subplot)
+        else:
+            g = sns.PairGrid(plot_data, 
+                            diag_sharey=False,
+                            height=height_per_subplot)
+        
+        # Fonctions pour les différents types de graphiques
+        def scatter_func(x, y, **kwargs):
+            color = self.colors['primary']
+            if 'hue' in kwargs and kwargs['hue'] is not None:
+                # Si hue est utilisé, seaborn gère les couleurs
+                sns.scatterplot(x=x, y=y, alpha=0.6, s=20, 
+                              edgecolor='white', linewidth=0.3, **kwargs)
             else:
-                # Si nouvelles données, appliquer même preprocessing que sur le training set
-                dummies_new = pd.get_dummies(X_new, drop_first=True)
-                # Conserver uniquement les colonnes présentes dans le modèle
-                missing_cols = set(self.X_scaled.columns) - set(dummies_new.columns)
-                for col in missing_cols:
-                    dummies_new[col] = 0
-                dummies_new = dummies_new[self.X_scaled.columns]  # ordre identique
-                # Standardisation
-                num_cols = dummies_new.select_dtypes(include=np.number).columns
-                dummies_new[num_cols] = self.scaler.transform(dummies_new[num_cols])
-                X_new_scaled = dummies_new
+                plt.scatter(x, y, alpha=0.6, s=20, 
+                          color=color, 
+                          edgecolor='white', linewidth=0.3)
+                
+            if plot_data[target].dtype != 'object' and plot_data[target].nunique() >= 10:
+                # Ajout de la ligne de régression pour les cibles continues
+                sns.regplot(x=x, y=y, scatter=False, 
+                           color=self.colors['secondary'], 
+                           line_kws={'linewidth': 1.5})
+        
+        def hist_func(x, **kwargs):
+            plt.hist(x, bins=30, alpha=0.8, 
+                    color=self.colors['primary'],
+                    edgecolor='white', linewidth=0.5)
+            plt.axvline(x.mean(), color=self.colors['secondary'], 
+                       linestyle='--', linewidth=2, 
+                       label=f'Moyenne: {x.mean():.2f}')
+        
+        # Application des fonctions
+        g.map_upper(scatter_func)
+        g.map_lower(scatter_func)
+        g.map_diag(hist_func)
+        
+        # Ajout de la légende pour les histogrammes
+        if g.axes[0, 0].get_legend_handles_labels()[0]:
+            g.axes[0, 0].legend(loc='best', fontsize=9)
+        
+        # Titre
+        plt.suptitle('Analyse des Relations entre Variables',
+                    fontsize=16,
+                    fontweight='bold',
+                    y=1.02)
+        
+        # Ajustement de l'espacement
+        plt.tight_layout()
+        return fig
+    
+    def fit(self, data: pd.DataFrame,
+            features: List[str],
+            target: str,
+            include_robust: bool = False,
+            standardisation: bool = False) -> None:
+        """
+        Ajuste un modèle de régression linéaire.
+        
+        Paramètres
+        ----------
+        data : pd.DataFrame
+            Données d'entrée
+        features : List[str]
+            Liste des caractéristiques
+        target : str
+            Variable cible
+        include_robust : bool
+            Si True, utilise les erreurs standards robustes
+        standardisation : bool
+            Si True, standardise les caractéristiques
+        """
+        self.standardisation = standardisation
+        self.feature_names = features
+        self.target_name = target
+        
+        # Préparation des données
+        if standardisation:
+            numerical_features = [f for f in features if data[f].dtype in ['int64', 'float64']]
+            data_processed = self.data_standardisation(data, numerical_features)
+        else:
+            data_processed = data.copy()
+        
+        # Préparation des matrices X et y
+        self.X = data_processed[features]
+        self.y = data_processed[target]
 
-            # Ajout constante si nécessaire
-            if 'const' not in X_new_scaled.columns:
-                X_new_scaled = sm.add_constant(X_new_scaled)
+        # Construction de la formule Patsy à partir des features
+        formula = f"{target} ~ {' + '.join(features)}"
 
-            y_pred = self.model.predict(X_new_scaled)
-
-            if log_transform and self.log_y is not None:
-                y_pred = np.exp(y_pred)
-
-            return y_pred
+        # Ajustement du modèle
+        if include_robust:
+            self.model = smf.ols(formula=formula, data=data_processed).fit(cov_type="HC0")
+        else:
+            self.model = smf.ols(formula=formula, data=data_processed).fit()
+    
+        # Affichage des résultats
+        print(self.model.summary())
+    
+    def predict(self, X_new: Union[pd.DataFrame, np.ndarray]) -> np.ndarray:
+        """
+        Prédit les valeurs pour de nouvelles observations.
+        
+        Paramètres
+        ----------
+        X_new : Union[pd.DataFrame, np.ndarray]
+            Nouvelles observations
+            
+        Retourne
+        -------
+        np.ndarray
+            Prédictions
+        """
+        if self.model is None:
+            raise ValueError("Le modèle n'a pas été ajusté. Utilisez fit() d'abord.")
+        
+        # Préparation des données
+        if isinstance(X_new, pd.DataFrame):
+            # Si c'est un DataFrame, s'assurer qu'il a les bonnes colonnes
+            X_new = X_new[self.feature_names]
+        else:
+            # Si c'est un array numpy, convertir en DataFrame
+            X_new = pd.DataFrame(X_new, columns=self.feature_names)
+        
+        # Standardisation si nécessaire
+        if self.standardisation:
+            numerical_features = [f for f in self.feature_names 
+                                if X_new[f].dtype in ['int64', 'float64']]
+            if numerical_features:
+                X_new[numerical_features] = self.scaler.transform(X_new[numerical_features])
+        
+        # Prédiction avec le modèle statsmodels
+        # Le modèle OLS de statsmodels.formula.api gère automatiquement les prédictions
+        return self.model.predict(X_new)
+    
+    def plot(self, dimension: int = 2, figsize: tuple = (10, 8)) -> plt.Figure:
+        """
+        Visualise les résultats de la régression.
+        
+        Paramètres
+        ----------
+        dimension : int
+            Dimension de la visualisation (2 ou 3)
+        figsize : tuple
+            Dimensions de la figure
+            
+        Retourne
+        -------
+        plt.Figure
+            Figure matplotlib
+        """
+        if self.model is None:
+            raise ValueError("Le modèle n'a pas été ajusté. Utilisez fit() d'abord.")
+        
+        if self.X.shape[1] == 1 and dimension == 2:
+            # Cas 2D : une caractéristique
+            fig, axes = plt.subplots(1, 2, figsize=figsize)
+            
+            # Graphique 1 : Nuage de points avec droite de régression
+            ax1 = axes[0]
+            ax1.scatter(self.X.iloc[:, 0], self.y, alpha=0.6, s=50,
+                       color=self.colors['primary'],
+                       edgecolor='white', linewidth=0.5,
+                       label='Données')
+            
+            # Droite de régression
+            x_range = np.linspace(self.X.iloc[:, 0].min(), self.X.iloc[:, 0].max(), 100)
+            x_range_df = pd.DataFrame({self.feature_names[0]: x_range})
+            y_pred = self.model.predict(x_range_df)
+            
+            ax1.plot(x_range, y_pred, 
+                    color=self.colors['secondary'],
+                    linewidth=2.5,
+                    label='Régression')
+            
+            ax1.set_xlabel(self.feature_names[0], fontsize=12)
+            ax1.set_ylabel(self.target_name, fontsize=12)
+            ax1.set_title('Régression Linéaire Simple', fontsize=14, fontweight='bold')
+            ax1.legend(loc='best')
+            ax1.grid(True, alpha=0.3)
+            
+            # Graphique 2 : Résidus
+            ax2 = axes[1]
+            residuals = self.model.resid
+            ax2.scatter(self.model.fittedvalues, residuals,
+                       alpha=0.6, s=50,
+                       color=self.colors['accent'],
+                       edgecolor='white', linewidth=0.5)
+            
+            ax2.axhline(y=0, color=self.colors['dark'],
+                       linestyle='--', linewidth=1.5)
+            ax2.set_xlabel('Valeurs prédites', fontsize=12)
+            ax2.set_ylabel('Résidus', fontsize=12)
+            ax2.set_title('Analyse des Résidus', fontsize=14, fontweight='bold')
+            ax2.grid(True, alpha=0.3)
+            
+            plt.suptitle('Diagnostics de la Régression',
+                        fontsize=16,
+                        fontweight='bold',
+                        y=1.02)
+            plt.tight_layout()
+            
+        else:
+            # Cas multivarié : graphique des coefficients
+            fig, ax = plt.subplots(figsize=figsize)
+            
+            # Récupération des coefficients, écart-types et p-values
+            # On doit aligner les coefficients avec les feature_names
+            coef_dict = {}
+            std_err_dict = {}
+            pvalues_dict = {}
+            
+            # Parcourir les paramètres du modèle et extraire les coefficients pour nos features
+            for feature in self.feature_names:
+                if feature in self.model.params:
+                    coef_dict[feature] = self.model.params[feature]
+                    std_err_dict[feature] = self.model.bse[feature]
+                    pvalues_dict[feature] = self.model.pvalues[feature]
+                else:
+                    # Si la feature n'est pas trouvée (cas des variables catégorielles transformées)
+                    # Chercher les coefficients qui commencent par ce nom
+                    matching_coefs = [k for k in self.model.params.index if k.startswith(feature + "[")]
+                    if matching_coefs:
+                        # Prendre le premier match (attention: cette approche est simplifiée)
+                        coef_dict[feature] = self.model.params[matching_coefs[0]]
+                        std_err_dict[feature] = self.model.bse[matching_coefs[0]]
+                        pvalues_dict[feature] = self.model.pvalues[matching_coefs[0]]
+                    else:
+                        # Si toujours pas trouvé, mettre à 0
+                        coef_dict[feature] = 0
+                        std_err_dict[feature] = 0
+                        pvalues_dict[feature] = 1
+            
+            # Créer des listes dans l'ordre des feature_names
+            coef = [coef_dict[feature] for feature in self.feature_names]
+            std_err = [std_err_dict[feature] for feature in self.feature_names]
+            pvalues = [pvalues_dict[feature] for feature in self.feature_names]
+            
+            # Palette de couleurs pour les p-values (de vert à rouge)
+            def get_pvalue_color(pval):
+                if pval < 0.001:
+                    return '#006400'  # vert très foncé
+                elif pval < 0.01:
+                    return '#228B22'  # vert forêt
+                elif pval < 0.05:
+                    return '#32CD32'  # vert lime
+                elif pval < 0.1:
+                    return '#FFA500'  # orange
+                else:
+                    return '#DC143C'  # rouge
+            
+            # Création des couleurs pour chaque coefficient
+            colors = [get_pvalue_color(pval) for pval in pvalues]
+            
+            # Création du bar plot avec des barres très fines
+            y_pos = np.arange(len(self.feature_names))
+            bar_height = 0.075  # Largeur des Barres
+            
+            bars = ax.barh(y_pos, coef, 
+                        height=bar_height,
+                        color=colors,
+                        edgecolor='black',
+                        linewidth=0.8,
+                        alpha=0.9)
+            
+            # Ajout des valeurs des coefficients avec écart-types entre parenthèses
+            for i, (bar, val, err) in enumerate(zip(bars, coef, std_err)):
+                # Position du texte dépend du signe du coefficient
+                if abs(val) > 0.001:  # Éviter les problèmes avec les très petites valeurs
+                    x_pos = val + (0.01 if val >= 0 else -0.01)
+                else:
+                    x_pos = 0.01  # Valeur par défaut pour les coefficients proches de 0
+                
+                ha = 'left' if val >= 0 else 'right'
+                
+                # Texte : coefficient (écart-type)
+                text = f'{val:.3f} ({err:.3f})'
+                
+                # Couleur du texte : noir pour meilleure lisibilité
+                text_color = 'black'
+                
+                # Ajout du texte
+                ax.text(x_pos, 
+                    bar.get_y() + bar.get_height()/2,
+                    text,
+                    va='center',
+                    ha=ha,
+                    fontsize=9,
+                    fontweight='medium',
+                    color=text_color,
+                    bbox=dict(boxstyle='round,pad=0.2', 
+                                facecolor='white', 
+                                alpha=0.85,
+                                edgecolor='lightgray',
+                                linewidth=0.5))
+            
+            # Configuration de l'axe Y
+            ax.set_yticks(y_pos)
+            ax.set_yticklabels(self.feature_names, fontsize=11, fontweight='medium')
+            
+            # Configuration de l'axe X
+            ax.set_xlabel('Valeur du coefficient', fontsize=12)
+            ax.set_title('Coefficients de la régression', 
+                        fontsize=14, 
+                        fontweight='bold',
+                        pad=20)
+            
+            # Ligne verticale à zéro
+            ax.axvline(x=0, color='black', linestyle='-', linewidth=1.2, alpha=0.7)
+            
+            # Grille uniquement sur l'axe X
+            ax.grid(True, alpha=0.2, axis='x', linestyle='--')
+            
+            # Création d'une barre de couleur (colorbar) pour les p-values
+            from matplotlib.cm import ScalarMappable
+            from matplotlib.colors import Normalize, ListedColormap
+            
+            # Définition des couleurs et des étiquettes pour la colorbar
+            colorbar_colors = ['#006400', '#228B22', '#32CD32', '#FFA500', '#DC143C']
+            colorbar_labels = ['p < 0.001', 'p < 0.01', 'p < 0.05', 'p < 0.1', 'p ≥ 0.1']
+            colorbar_bounds = [0, 0.001, 0.01, 0.05, 0.1, 1.0]
+            
+            # Création d'une colormap discrète
+            cmap = ListedColormap(colorbar_colors)
+            
+            # Création d'un mappable pour la colorbar
+            norm = Normalize(vmin=0, vmax=1)
+            sm = ScalarMappable(cmap=cmap, norm=norm)
+            sm.set_array([])
+            
+            # Ajout de la colorbar à droite du graphique
+            cbar = fig.colorbar(sm, ax=ax, orientation='vertical', 
+                            pad=0.02, shrink=0.8, aspect=20)
+            
+            # Configuration des ticks de la colorbar
+            tick_positions = [0.1, 0.3, 0.5, 0.7, 0.9]  # Positions des ticks au centre de chaque couleur
+            cbar.set_ticks(tick_positions)
+            cbar.set_ticklabels(colorbar_labels, fontsize=8)
+            
+            # Ajustement des limites pour s'assurer que tout est visible
+            x_min, x_max = ax.get_xlim()
+            x_range = x_max - x_min
+            ax.set_xlim(x_min - 0.05 * x_range, x_max + 0.05 * x_range)
+            
+            # Ajustement de la disposition pour faire de la place à la colorbar
+            plt.subplots_adjust(right=0.85)
+            
+            plt.tight_layout()
+        return fig
