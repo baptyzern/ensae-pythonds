@@ -4,8 +4,9 @@ import statsmodels.formula.api as smf
 import matplotlib.pyplot as plt
 import seaborn as sns
 from sklearn.preprocessing import StandardScaler
-from typing import List, Optional, Union, Dict, Any
+from typing import List, Optional, Union, Dict, Any, Tuple
 import warnings
+from statsmodels.stats.outliers_influence import variance_inflation_factor
 
 class PipelineRegression:
     """
@@ -26,7 +27,9 @@ class PipelineRegression:
         Standardiseur pour les variables explicatives
     standardisation : bool
         Indicateur de standardisation des données
-    
+    stepwise_best : statsmodels.regression.linear_model.RegressionResultsWrapper
+        Meilleur modèle de la sélection stepwise
+        
     Références (Travaux de Lino Galiana)
     ------------------------------------
     - https://pythonds.linogaliana.fr
@@ -42,6 +45,7 @@ class PipelineRegression:
         self.scaler = StandardScaler()
         self.feature_names = None
         self.target_name = None
+        self.stepwise_best = None
         
         # Configuration globale des styles
         plt.style.use('seaborn-v0_8-whitegrid')
@@ -50,7 +54,9 @@ class PipelineRegression:
             'secondary': '#A23B72',
             'accent': '#F18F01',
             'dark': '#2D3047',
-            'light': '#C5C5C5'
+            'light': '#C5C5C5',
+            'warning': '#FF6B6B',
+            'safe': '#4ECDC4'
         }
     
     def data_standardisation(self, data: pd.DataFrame, 
@@ -95,8 +101,6 @@ class PipelineRegression:
             Liste des caractéristiques
         target : str
             Variable cible
-        standardisation : bool
-            Si True, standardise les caractéristiques numériques
         figsize : tuple
             Dimensions de la figure
         annot : bool
@@ -108,7 +112,6 @@ class PipelineRegression:
             Figure matplotlib
         """
         # Préparation des données
-
         data_processed = data.copy()
         
         # Sélection et calcul des corrélations
@@ -163,8 +166,6 @@ class PipelineRegression:
             Liste des caractéristiques
         target : str
             Variable cible
-        standardisation : bool
-            Si True, standardise les caractéristiques numériques
         figsize : tuple
             Dimensions de la figure
             
@@ -174,7 +175,6 @@ class PipelineRegression:
             Figure matplotlib
         """
         # Préparation des données
-
         data_processed = data.copy()
         
         # Limiter le nombre de caractéristiques pour la lisibilité
@@ -191,7 +191,6 @@ class PipelineRegression:
         
         # Création de la grille
         n_features = len(features)
-        # Calcul de la hauteur par sous-graphique
         height_per_subplot = figsize[0] / max(n_features, 1)
         
         # Vérifier si la cible est catégorielle pour décider d'utiliser hue
@@ -209,7 +208,6 @@ class PipelineRegression:
         def scatter_func(x, y, **kwargs):
             color = self.colors['primary']
             if 'hue' in kwargs and kwargs['hue'] is not None:
-                # Si hue est utilisé, seaborn gère les couleurs
                 sns.scatterplot(x=x, y=y, alpha=0.6, s=20, 
                               edgecolor='white', linewidth=0.3, **kwargs)
             else:
@@ -218,7 +216,6 @@ class PipelineRegression:
                           edgecolor='white', linewidth=0.3)
                 
             if plot_data[target].dtype != 'object' and plot_data[target].nunique() >= 10:
-                # Ajout de la ligne de régression pour les cibles continues
                 sns.regplot(x=x, y=y, scatter=False, 
                            color=self.colors['secondary'], 
                            line_kws={'linewidth': 1.5})
@@ -250,6 +247,295 @@ class PipelineRegression:
         plt.tight_layout()
         return fig
     
+    def vif_plots(self, data: pd.DataFrame,
+                 features: List[str],
+                 target: str = None,
+                 figsize: tuple = (12, 6)) -> plt.Figure:
+        """
+        Calcule et visualise les VIF (Variance Inflation Factor) des variables.
+        
+        Paramètres
+        ----------
+        data : pd.DataFrame
+            Données d'entrée
+        features : List[str]
+            Liste des caractéristiques
+        target : str, optional
+            Variable cible (non utilisée dans le VIF mais pour la cohérence)
+        figsize : tuple
+            Dimensions de la figure
+            
+        Retourne
+        -------
+        plt.Figure
+            Figure matplotlib
+        """
+        # Préparation des données
+        data_processed = data[features].copy()
+        
+        # Vérifier que toutes les variables sont numériques
+        non_numeric = [f for f in features if data_processed[f].dtype not in ['int64', 'float64']]
+        if non_numeric:
+            warnings.warn(f"Les variables suivantes ne sont pas numériques et seront exclues: {non_numeric}")
+            features = [f for f in features if f not in non_numeric]
+            data_processed = data_processed[features]
+        
+        # Ajouter une constante pour le calcul du VIF
+        data_processed = pd.DataFrame(data_processed).assign(const=1)
+        
+        # Calculer le VIF pour chaque variable
+        vif_data = pd.DataFrame()
+        vif_data["Variable"] = features
+        vif_data["VIF"] = [variance_inflation_factor(data_processed.values, i) 
+                          for i in range(len(features))]
+        
+        # Tri par VIF décroissant
+        vif_data = vif_data.sort_values("VIF", ascending=False).reset_index(drop=True)
+        
+        # Création de la figure
+        fig, ax = plt.subplots(figsize=figsize)
+        
+        # Création du graphique à barres
+        bars = ax.bar(vif_data["Variable"], vif_data["VIF"], 
+              width=0.075,  # Ajouter cet argument
+              color=[self.colors['warning'] if v > 10 else self.colors['primary'] 
+                     for v in vif_data["VIF"]])
+        
+        # Ligne de seuil VIF = 10
+        ax.axhline(y=10, color=self.colors['warning'], linestyle='--', 
+                  linewidth=2, label='VIF = 10 ')
+        
+        # Ligne de seuil VIF = 5
+        ax.axhline(y=5, color=self.colors['accent'], linestyle=':', 
+                  linewidth=1.5, label='VIF = 5')
+        
+        # Personnalisation
+        ax.set_xlabel('Variables', fontsize=12, fontweight='bold')
+        ax.set_ylabel('vif', fontsize=12, fontweight='bold')
+        ax.set_title('Diagnostic de Multicolinéarité', 
+                    fontsize=16, fontweight='bold', pad=20)
+        
+        # Rotation des étiquettes des variables
+        plt.xticks(rotation=45, ha='right')
+        
+        # Ajouter les valeurs sur les barres
+        for bar in bars:
+            height = bar.get_height()
+            ax.text(bar.get_x() + bar.get_width()/2., height + 0.1,
+                   f'{height:.1f}', ha='center', va='bottom', fontsize=9)
+        
+        # Légende
+        ax.legend(loc='upper right', fontsize=10)
+        
+        # Grille
+        ax.grid(True, alpha=0.3, axis='y')
+        
+        # Ajustement des limites
+        max_vif = max(vif_data["VIF"])
+        ax.set_ylim(0, max(max_vif * 1.1, 12))
+        
+        # Informations textuelles
+        high_vif = vif_data[vif_data["VIF"] > 10]
+        moderate_vif = vif_data[(vif_data["VIF"] > 5) & (vif_data["VIF"] <= 10)]
+        
+        info_text = []
+        if not high_vif.empty:
+            info_text.append(f"Multicolinéarité élevée (VIF > 10): {len(high_vif)} variable(s)")
+        if not moderate_vif.empty:
+            info_text.append(f"Multicolinéarité modérée (5 < VIF ≤ 10): {len(moderate_vif)} variable(s)")
+        
+        if info_text:
+            info_str = "\n".join(info_text)
+            ax.text(0.02, 0.98, info_str, transform=ax.transAxes,
+                   fontsize=9, verticalalignment='top',
+                   bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.5))
+        
+        plt.tight_layout()
+        
+        return fig
+
+
+    def fit_stepwise(self, data: pd.DataFrame,
+                 features: List[str],
+                 target: str,
+                 include_robust: bool = False,
+                 standardisation: bool = False,
+                 forward: bool = True,
+                 verbose: bool = True,
+                 best : bool = False) -> None:
+        """
+        Implémente une sélection stepwise des variables (forward ou backward) 
+        basée uniquement sur l'AIC avec affichage des tableaux statsmodels complets.
+        
+        Paramètres
+        ----------
+        data : pd.DataFrame
+            Données d'entrée
+        features : List[str]
+            Liste des caractéristiques initiales
+        target : str
+            Variable cible
+        include_robust : bool
+            Si True, utilise les erreurs standards robustes
+        standardisation : bool
+            Si True, standardise les caractéristiques
+        forward : bool
+            Si True, utilise forward selection, sinon backward elimination
+        verbose : bool
+            Si True, affiche le tableau model.summary() uniquement pour le modèle retenu à chaque étape
+            
+        Retourne
+        -------
+        None
+            Stocke le meilleur modèle dans self.stepwise_best
+        """
+        self.standardisation = standardisation
+        self.feature_names = features
+        self.target_name = target
+        
+        # Préparation des données
+        if standardisation:
+            numerical_features = [f for f in features if data[f].dtype in ['int64', 'float64']]
+            data_processed = self.data_standardisation(data, numerical_features)
+        else:
+            data_processed = data.copy()
+        
+        if forward:
+            self._forward_selection_aic(data_processed, features, target, include_robust, verbose)
+            if best :
+                print("MEILLEUR MODÈLE AVEC FORWARD SELECTION \n")
+                print(self.stepwise_best.summary())
+        else:
+            self._backward_elimination_aic(data_processed, features, target, include_robust, verbose)
+            if best :
+                print("MEILLEUR MODÈLE AVEC BACKWARD SELECTION \n")
+                print(self.stepwise_best.summary())
+                
+
+    def _forward_selection_aic(self, data: pd.DataFrame,
+                            features: List[str],
+                            target: str,
+                            include_robust: bool,
+                            verbose: bool) -> None:
+        """
+        Implémente la sélection forward basée uniquement sur l'AIC.
+        Affiche uniquement le tableau du modèle retenu à chaque étape.
+        """
+        selected_features = []
+        remaining_features = features.copy()
+        iteration = 0
+        
+        while remaining_features:
+            iteration += 1
+            best_candidate = None
+            best_aic = float('inf')
+            best_model = None
+            
+            # Tester chaque variable candidate (sans afficher les tableaux)
+            for candidate in remaining_features:
+                test_features = selected_features + [candidate]
+                formula = f"{target} ~ {' + '.join(test_features)}"
+                
+                try:
+                    if include_robust:
+                        model = smf.ols(formula=formula, data=data).fit(cov_type="HC0")
+                    else:
+                        model = smf.ols(formula=formula, data=data).fit()
+                    
+                    # Mettre à jour la meilleure candidate basée sur AIC
+                    if model.aic < best_aic:
+                        best_aic = model.aic
+                        best_candidate = candidate
+                        best_model = model
+                        
+                except Exception as e:
+                    print(f"  - {candidate}: Erreur - {str(e)}")
+            
+            # Vérifier s'il y a une amélioration
+            if iteration == 1 or best_aic < self.stepwise_best.aic:
+                selected_features.append(best_candidate)
+                remaining_features.remove(best_candidate)
+                self.stepwise_best = best_model
+                
+                # Afficher UNIQUEMENT le tableau du modèle retenu (si verbose=True)
+                if verbose:
+                    print("\n")
+                    print(f"================ÉTAPE {iteration} - FORWARD SELECTION================= \n")
+                    print(self.stepwise_best.summary())
+            else:
+                break
+
+    def _backward_elimination_aic(self, data: pd.DataFrame,
+                                features: List[str],
+                                target: str,
+                                include_robust: bool,
+                                verbose: bool) -> None:
+        """
+        Implémente l'élimination backward basée uniquement sur l'AIC.
+        Affiche uniquement le tableau du modèle retenu à chaque étape.
+        """
+        current_features = features.copy()
+        iteration = 0
+        
+        # Modèle initial avec toutes les variables
+        formula = f"{target} ~ {' + '.join(current_features)}"
+        if include_robust:
+            current_model = smf.ols(formula=formula, data=data).fit(cov_type="HC0")
+        else:
+            current_model = smf.ols(formula=formula, data=data).fit()
+        
+        self.stepwise_best = current_model
+        
+        if verbose:
+            print(f"\n{'='*60}")
+            print(f"MODÈLE INITIAL")
+            print(f"{'='*60}")
+            print(self.stepwise_best.summary())
+        
+        while len(current_features) > 1:
+            iteration += 1
+            best_aic = float('inf')
+            best_features = None
+            best_model = None
+            removed_feature = None
+            
+            
+            # Tester chaque suppression possible (sans afficher les tableaux)
+            for feature_to_remove in current_features:
+                test_features = [f for f in current_features if f != feature_to_remove]
+                formula = f"{target} ~ {' + '.join(test_features)}"
+                
+                try:
+                    if include_robust:
+                        model = smf.ols(formula=formula, data=data).fit(cov_type="HC0")
+                    else:
+                        model = smf.ols(formula=formula, data=data).fit()
+                    
+                    # Trouver le meilleur modèle (AIC le plus bas)
+                    if model.aic < best_aic:
+                        best_aic = model.aic
+                        best_features = test_features
+                        best_model = model
+                        removed_feature = feature_to_remove
+                        
+                except Exception as e:
+                    print(f"  - Sans {feature_to_remove}: Erreur - {str(e)}")
+            
+            # Vérifier si la suppression améliore l'AIC
+            if best_aic < self.stepwise_best.aic:
+                current_features = best_features
+                self.stepwise_best = best_model
+                
+                # Afficher UNIQUEMENT le tableau du modèle retenu (si verbose=True)
+                if verbose:
+                    print("\n")
+                    print(f"================ÉTAPE {iteration} - BACKWARD SELECTION=================\n")
+                    print(self.stepwise_best.summary())
+            else:
+                break
+
+
+
     def fit(self, data: pd.DataFrame,
             features: List[str],
             target: str,
@@ -282,11 +568,7 @@ class PipelineRegression:
         else:
             data_processed = data.copy()
         
-        # Préparation des matrices X et y
-        self.X = data_processed[features]
-        self.y = data_processed[target]
-
-        # Construction de la formule Patsy à partir des features
+        # Construction de la formule Patsy
         formula = f"{target} ~ {' + '.join(features)}"
 
         # Ajustement du modèle
@@ -317,10 +599,8 @@ class PipelineRegression:
         
         # Préparation des données
         if isinstance(X_new, pd.DataFrame):
-            # Si c'est un DataFrame, s'assurer qu'il a les bonnes colonnes
             X_new = X_new[self.feature_names]
         else:
-            # Si c'est un array numpy, convertir en DataFrame
             X_new = pd.DataFrame(X_new, columns=self.feature_names)
         
         # Standardisation si nécessaire
@@ -330,221 +610,5 @@ class PipelineRegression:
             if numerical_features:
                 X_new[numerical_features] = self.scaler.transform(X_new[numerical_features])
         
-        # Prédiction avec le modèle statsmodels
-        # Le modèle OLS de statsmodels.formula.api gère automatiquement les prédictions
+        # Prédiction
         return self.model.predict(X_new)
-    
-    def plot(self, dimension: int = 2, figsize: tuple = (10, 8)) -> plt.Figure:
-        """
-        Visualise les résultats de la régression.
-        
-        Paramètres
-        ----------
-        dimension : int
-            Dimension de la visualisation (2 ou 3)
-        figsize : tuple
-            Dimensions de la figure
-            
-        Retourne
-        -------
-        plt.Figure
-            Figure matplotlib
-        """
-        if self.model is None:
-            raise ValueError("Le modèle n'a pas été ajusté. Utilisez fit() d'abord.")
-        
-        if self.X.shape[1] == 1 and dimension == 2:
-            # Cas 2D : une caractéristique
-            fig, axes = plt.subplots(1, 2, figsize=figsize)
-            
-            # Graphique 1 : Nuage de points avec droite de régression
-            ax1 = axes[0]
-            ax1.scatter(self.X.iloc[:, 0], self.y, alpha=0.6, s=50,
-                       color=self.colors['primary'],
-                       edgecolor='white', linewidth=0.5,
-                       label='Données')
-            
-            # Droite de régression
-            x_range = np.linspace(self.X.iloc[:, 0].min(), self.X.iloc[:, 0].max(), 100)
-            x_range_df = pd.DataFrame({self.feature_names[0]: x_range})
-            y_pred = self.model.predict(x_range_df)
-            
-            ax1.plot(x_range, y_pred, 
-                    color=self.colors['secondary'],
-                    linewidth=2.5,
-                    label='Régression')
-            
-            ax1.set_xlabel(self.feature_names[0], fontsize=12)
-            ax1.set_ylabel(self.target_name, fontsize=12)
-            ax1.set_title('Régression Linéaire Simple', fontsize=14, fontweight='bold')
-            ax1.legend(loc='best')
-            ax1.grid(True, alpha=0.3)
-            
-            # Graphique 2 : Résidus
-            ax2 = axes[1]
-            residuals = self.model.resid
-            ax2.scatter(self.model.fittedvalues, residuals,
-                       alpha=0.6, s=50,
-                       color=self.colors['accent'],
-                       edgecolor='white', linewidth=0.5)
-            
-            ax2.axhline(y=0, color=self.colors['dark'],
-                       linestyle='--', linewidth=1.5)
-            ax2.set_xlabel('Valeurs prédites', fontsize=12)
-            ax2.set_ylabel('Résidus', fontsize=12)
-            ax2.set_title('Analyse des Résidus', fontsize=14, fontweight='bold')
-            ax2.grid(True, alpha=0.3)
-            
-            plt.suptitle('Diagnostics de la Régression',
-                        fontsize=16,
-                        fontweight='bold',
-                        y=1.02)
-            plt.tight_layout()
-            
-        else:
-            # Cas multivarié : graphique des coefficients
-            fig, ax = plt.subplots(figsize=figsize)
-            
-            # Récupération des coefficients, écart-types et p-values
-            # On doit aligner les coefficients avec les feature_names
-            coef_dict = {}
-            std_err_dict = {}
-            pvalues_dict = {}
-            
-            # Parcourir les paramètres du modèle et extraire les coefficients pour nos features
-            for feature in self.feature_names:
-                if feature in self.model.params:
-                    coef_dict[feature] = self.model.params[feature]
-                    std_err_dict[feature] = self.model.bse[feature]
-                    pvalues_dict[feature] = self.model.pvalues[feature]
-                else:
-                    # Si la feature n'est pas trouvée (cas des variables catégorielles transformées)
-                    # Chercher les coefficients qui commencent par ce nom
-                    matching_coefs = [k for k in self.model.params.index if k.startswith(feature + "[")]
-                    if matching_coefs:
-                        # Prendre le premier match (attention: cette approche est simplifiée)
-                        coef_dict[feature] = self.model.params[matching_coefs[0]]
-                        std_err_dict[feature] = self.model.bse[matching_coefs[0]]
-                        pvalues_dict[feature] = self.model.pvalues[matching_coefs[0]]
-                    else:
-                        # Si toujours pas trouvé, mettre à 0
-                        coef_dict[feature] = 0
-                        std_err_dict[feature] = 0
-                        pvalues_dict[feature] = 1
-            
-            # Créer des listes dans l'ordre des feature_names
-            coef = [coef_dict[feature] for feature in self.feature_names]
-            std_err = [std_err_dict[feature] for feature in self.feature_names]
-            pvalues = [pvalues_dict[feature] for feature in self.feature_names]
-            
-            # Palette de couleurs pour les p-values (de vert à rouge)
-            def get_pvalue_color(pval):
-                if pval < 0.001:
-                    return '#006400'  # vert très foncé
-                elif pval < 0.01:
-                    return '#228B22'  # vert forêt
-                elif pval < 0.05:
-                    return '#32CD32'  # vert lime
-                elif pval < 0.1:
-                    return '#FFA500'  # orange
-                else:
-                    return '#DC143C'  # rouge
-            
-            # Création des couleurs pour chaque coefficient
-            colors = [get_pvalue_color(pval) for pval in pvalues]
-            
-            # Création du bar plot avec des barres très fines
-            y_pos = np.arange(len(self.feature_names))
-            bar_height = 0.075  # Largeur des Barres
-            
-            bars = ax.barh(y_pos, coef, 
-                        height=bar_height,
-                        color=colors,
-                        edgecolor='black',
-                        linewidth=0.8,
-                        alpha=0.9)
-            
-            # Ajout des valeurs des coefficients avec écart-types entre parenthèses
-            for i, (bar, val, err) in enumerate(zip(bars, coef, std_err)):
-                # Position du texte dépend du signe du coefficient
-                if abs(val) > 0.001:  # Éviter les problèmes avec les très petites valeurs
-                    x_pos = val + (0.01 if val >= 0 else -0.01)
-                else:
-                    x_pos = 0.01  # Valeur par défaut pour les coefficients proches de 0
-                
-                ha = 'left' if val >= 0 else 'right'
-                
-                # Texte : coefficient (écart-type)
-                text = f'{val:.3f} ({err:.3f})'
-                
-                # Couleur du texte : noir pour meilleure lisibilité
-                text_color = 'black'
-                
-                # Ajout du texte
-                ax.text(x_pos, 
-                    bar.get_y() + bar.get_height()/2,
-                    text,
-                    va='center',
-                    ha=ha,
-                    fontsize=9,
-                    fontweight='medium',
-                    color=text_color,
-                    bbox=dict(boxstyle='round,pad=0.2', 
-                                facecolor='white', 
-                                alpha=0.85,
-                                edgecolor='lightgray',
-                                linewidth=0.5))
-            
-            # Configuration de l'axe Y
-            ax.set_yticks(y_pos)
-            ax.set_yticklabels(self.feature_names, fontsize=11, fontweight='medium')
-            
-            # Configuration de l'axe X
-            ax.set_xlabel('Valeur du coefficient', fontsize=12)
-            ax.set_title('Coefficients de la régression', 
-                        fontsize=14, 
-                        fontweight='bold',
-                        pad=20)
-            
-            # Ligne verticale à zéro
-            ax.axvline(x=0, color='black', linestyle='-', linewidth=1.2, alpha=0.7)
-            
-            # Grille uniquement sur l'axe X
-            ax.grid(True, alpha=0.2, axis='x', linestyle='--')
-            
-            # Création d'une barre de couleur (colorbar) pour les p-values
-            from matplotlib.cm import ScalarMappable
-            from matplotlib.colors import Normalize, ListedColormap
-            
-            # Définition des couleurs et des étiquettes pour la colorbar
-            colorbar_colors = ['#006400', '#228B22', '#32CD32', '#FFA500', '#DC143C']
-            colorbar_labels = ['p < 0.001', 'p < 0.01', 'p < 0.05', 'p < 0.1', 'p ≥ 0.1']
-            colorbar_bounds = [0, 0.001, 0.01, 0.05, 0.1, 1.0]
-            
-            # Création d'une colormap discrète
-            cmap = ListedColormap(colorbar_colors)
-            
-            # Création d'un mappable pour la colorbar
-            norm = Normalize(vmin=0, vmax=1)
-            sm = ScalarMappable(cmap=cmap, norm=norm)
-            sm.set_array([])
-            
-            # Ajout de la colorbar à droite du graphique
-            cbar = fig.colorbar(sm, ax=ax, orientation='vertical', 
-                            pad=0.02, shrink=0.8, aspect=20)
-            
-            # Configuration des ticks de la colorbar
-            tick_positions = [0.1, 0.3, 0.5, 0.7, 0.9]  # Positions des ticks au centre de chaque couleur
-            cbar.set_ticks(tick_positions)
-            cbar.set_ticklabels(colorbar_labels, fontsize=8)
-            
-            # Ajustement des limites pour s'assurer que tout est visible
-            x_min, x_max = ax.get_xlim()
-            x_range = x_max - x_min
-            ax.set_xlim(x_min - 0.05 * x_range, x_max + 0.05 * x_range)
-            
-            # Ajustement de la disposition pour faire de la place à la colorbar
-            plt.subplots_adjust(right=0.85)
-            
-            plt.tight_layout()
-        return fig
