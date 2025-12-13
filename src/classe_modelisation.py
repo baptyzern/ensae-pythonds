@@ -7,6 +7,7 @@ from sklearn.preprocessing import StandardScaler
 from typing import List, Optional, Union, Dict, Any, Tuple
 import warnings
 from statsmodels.stats.outliers_influence import variance_inflation_factor
+import matplotlib.gridspec as gridspec
 
 class PipelineRegression:
     """
@@ -89,7 +90,8 @@ class PipelineRegression:
                        features: List[str], 
                        target: str,
                        figsize: tuple = (10, 8),
-                       annot: bool = True) -> plt.Figure:
+                       annot: bool = True,
+                       ax: Optional[plt.Axes] = None) -> plt.Figure:
         """
         Génère une heatmap matricielle de corrélations.
         
@@ -105,6 +107,8 @@ class PipelineRegression:
             Dimensions de la figure
         annot : bool
             Si True, affiche les valeurs dans les cellules
+        ax : plt.Axes, optional
+            Axe matplotlib sur lequel dessiner
             
         Retourne
         -------
@@ -120,7 +124,10 @@ class PipelineRegression:
         corr_matrix = data_processed[selected_features].corr()
         
         # Création de la figure
-        fig, ax = plt.subplots(figsize=figsize)
+        if ax is None:
+            fig, ax = plt.subplots(figsize=figsize)
+        else:
+            fig = ax.figure
         
         # Masque pour le triangle supérieur
         mask = np.triu(np.ones_like(corr_matrix, dtype=bool))
@@ -145,10 +152,11 @@ class PipelineRegression:
         ax.tick_params(axis='both', which='major', labelsize=10)
         
         # Rotation des étiquettes
-        plt.xticks(rotation=45, ha='right')
-        plt.yticks(rotation=0)
+        plt.setp(ax.get_xticklabels(), rotation=45, ha='right')
+        plt.setp(ax.get_yticklabels(), rotation=0)
         
-        plt.tight_layout()
+        if ax is None:
+            plt.tight_layout()
         return fig
     
     def paires_plot(self, data: pd.DataFrame,
@@ -250,7 +258,8 @@ class PipelineRegression:
     def vif_plots(self, data: pd.DataFrame,
                  features: List[str],
                  target: str = None,
-                 figsize: tuple = (12, 6)) -> plt.Figure:
+                 figsize: tuple = (12, 6),
+                 ax: Optional[plt.Axes] = None) -> plt.Figure:
         """
         Calcule et visualise les VIF (Variance Inflation Factor) des variables.
         
@@ -264,6 +273,8 @@ class PipelineRegression:
             Variable cible (non utilisée dans le VIF mais pour la cohérence)
         figsize : tuple
             Dimensions de la figure
+        ax : plt.Axes, optional
+            Axe matplotlib sur lequel dessiner
             
         Retourne
         -------
@@ -293,30 +304,32 @@ class PipelineRegression:
         vif_data = vif_data.sort_values("VIF", ascending=False).reset_index(drop=True)
         
         # Création de la figure
-        fig, ax = plt.subplots(figsize=figsize)
+        if ax is None:
+            fig, ax = plt.subplots(figsize=figsize)
+        else:
+            fig = ax.figure
         
         # Création du graphique à barres
         bars = ax.bar(vif_data["Variable"], vif_data["VIF"], 
-              width=0.075,  # Ajouter cet argument
-              color=[self.colors['warning'] if v > 10 else self.colors['primary'] 
-                     for v in vif_data["VIF"]])
+                      width=0.25,  
+                      color=[self.colors['warning'] if v > 10 else self.colors['primary'] 
+                             for v in vif_data["VIF"]])
         
         # Ligne de seuil VIF = 10
         ax.axhline(y=10, color=self.colors['warning'], linestyle='--', 
-                  linewidth=2, label='VIF = 10 ')
+                  linewidth=2, label='VIF = 10')
         
         # Ligne de seuil VIF = 5
         ax.axhline(y=5, color=self.colors['accent'], linestyle=':', 
                   linewidth=1.5, label='VIF = 5')
         
         # Personnalisation
-        ax.set_xlabel('Variables', fontsize=12, fontweight='bold')
-        ax.set_ylabel('vif', fontsize=12, fontweight='bold')
+        ax.set_ylabel('VIF', fontsize=12, fontweight='bold')
         ax.set_title('Diagnostic de Multicolinéarité', 
                     fontsize=16, fontweight='bold', pad=20)
         
         # Rotation des étiquettes des variables
-        plt.xticks(rotation=45, ha='right')
+        plt.setp(ax.get_xticklabels(), rotation=45, ha='right')
         
         # Ajouter les valeurs sur les barres
         for bar in bars:
@@ -350,10 +363,48 @@ class PipelineRegression:
                    fontsize=9, verticalalignment='top',
                    bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.5))
         
-        plt.tight_layout()
+        if ax is None:
+            plt.tight_layout()
         
         return fig
-
+    
+    def headmap_vif(self, data: pd.DataFrame,
+                               features: List[str],
+                               target: str,
+                               figsize: tuple = (24, 8)) -> plt.Figure:
+        """
+        Crée un dashboard complet avec 3 visualisations principales.
+        
+        Paramètres
+        ----------
+        data : pd.DataFrame
+            Données d'entrée
+        features : List[str]
+            Liste des caractéristiques
+        target : str
+            Variable cible
+        figsize : tuple
+            Dimensions de la figure
+            
+        Retourne
+        -------
+        plt.Figure
+            Figure matplotlib avec les 3 graphiques
+        """
+        fig, axes = plt.subplots(1, 2, figsize=figsize)
+        
+        # 1. Heatmap
+        self.heatmap_matrix(data=data, features=features, target=target, ax=axes[0])
+        axes[0].set_title('Matrice de Corrélation', fontsize=14, fontweight='bold')
+        
+        # 2. VIF plots
+        self.vif_plots(data=data, features=features, target=target, ax=axes[1])
+        axes[1].set_title('Diagnostic de Multicolinéarité (VIF)', fontsize=14, fontweight='bold')
+        
+        
+        # Ajustement de l'espacement
+        plt.tight_layout()
+        return fig
 
     def fit_stepwise(self, data: pd.DataFrame,
                  features: List[str],
@@ -383,6 +434,8 @@ class PipelineRegression:
             Si True, utilise forward selection, sinon backward elimination
         verbose : bool
             Si True, affiche le tableau model.summary() uniquement pour le modèle retenu à chaque étape
+        best : bool
+            Si True, affiche uniquement le meilleur modèle final
             
         Retourne
         -------
@@ -403,12 +456,16 @@ class PipelineRegression:
         if forward:
             self._forward_selection_aic(data_processed, features, target, include_robust, verbose)
             if best :
-                print("MEILLEUR MODÈLE AVEC FORWARD SELECTION \n")
+                print("="*60)
+                print("MEILLEUR MODÈLE AVEC FORWARD SELECTION")
+                print("="*60)
                 print(self.stepwise_best.summary())
         else:
             self._backward_elimination_aic(data_processed, features, target, include_robust, verbose)
             if best :
-                print("MEILLEUR MODÈLE AVEC BACKWARD SELECTION \n")
+                print("="*60)
+                print("MEILLEUR MODÈLE AVEC BACKWARD SELECTION")
+                print("="*60)
                 print(self.stepwise_best.summary())
                 
 
@@ -612,3 +669,86 @@ class PipelineRegression:
         
         # Prédiction
         return self.model.predict(X_new)
+    
+    def diagnostic_plots(self, data: pd.DataFrame,
+                        figsize: tuple = (15, 10)) -> plt.Figure:
+        """
+        Crée des graphiques de diagnostic pour le modèle ajusté.
+        
+        Paramètres
+        ----------
+        data : pd.DataFrame
+            Données d'entrée
+        figsize : tuple
+            Dimensions de la figure
+            
+        Retourne
+        -------
+        plt.Figure
+            Figure matplotlib avec les diagnostics
+        """
+        if self.model is None:
+            raise ValueError("Le modèle n'a pas été ajusté. Utilisez fit() d'abord.")
+        
+        # Prédictions et résidus
+        y_pred = self.predict(data[self.feature_names])
+        residuals = data[self.target_name] - y_pred
+        standardized_residuals = residuals / np.std(residuals)
+        
+        # Création de la figure
+        fig = plt.figure(figsize=figsize)
+        
+        # Grille 2x2 pour les diagnostics
+        gs = gridspec.GridSpec(2, 2)
+        
+        # 1. Résidus vs Prédictions
+        ax1 = fig.add_subplot(gs[0, 0])
+        ax1.scatter(y_pred, residuals, alpha=0.6, color=self.colors['primary'])
+        ax1.axhline(y=0, color='red', linestyle='--', linewidth=1)
+        ax1.set_xlabel('Prédictions', fontsize=12)
+        ax1.set_ylabel('Résidus', fontsize=12)
+        ax1.set_title('Résidus vs Prédictions', fontsize=14, fontweight='bold')
+        ax1.grid(True, alpha=0.3)
+        
+        # 2. QQ-plot des résidus
+        ax2 = fig.add_subplot(gs[0, 1])
+        from scipy import stats
+        stats.probplot(residuals, dist="norm", plot=ax2)
+        ax2.set_title('QQ-plot des Résidus', fontsize=14, fontweight='bold')
+        ax2.grid(True, alpha=0.3)
+        
+        # 3. Histogramme des résidus
+        ax3 = fig.add_subplot(gs[1, 0])
+        ax3.hist(residuals, bins=30, alpha=0.7, color=self.colors['primary'],
+                edgecolor='white', linewidth=0.5)
+        ax3.axvline(0, color='red', linestyle='--', linewidth=2)
+        ax3.set_xlabel('Résidus', fontsize=12)
+        ax3.set_ylabel('Fréquence', fontsize=12)
+        ax3.set_title('Distribution des Résidus', fontsize=14, fontweight='bold')
+        ax3.grid(True, alpha=0.3)
+        
+        # 4. Résidus standardisés
+        ax4 = fig.add_subplot(gs[1, 1])
+        ax4.scatter(range(len(standardized_residuals)), standardized_residuals,
+                   alpha=0.6, color=self.colors['primary'])
+        ax4.axhline(y=0, color='red', linestyle='-', linewidth=1)
+        ax4.axhline(y=2, color=self.colors['warning'], linestyle='--', linewidth=1)
+        ax4.axhline(y=-2, color=self.colors['warning'], linestyle='--', linewidth=1)
+        ax4.set_xlabel('Index des Observations', fontsize=12)
+        ax4.set_ylabel('Résidus Standardisés', fontsize=12)
+        ax4.set_title('Résidus Standardisés', fontsize=14, fontweight='bold')
+        ax4.grid(True, alpha=0.3)
+        
+        # Informations statistiques
+        info_text = (f"R²: {self.model.rsquared:.3f}\n"
+                    f"R² ajusté: {self.model.rsquared_adj:.3f}\n"
+                    f"MSE: {np.mean(residuals**2):.3f}\n"
+                    f"Test de normalité (Shapiro-Wilk):\n"
+                    f"  p-value: {stats.shapiro(residuals)[1]:.4f}")
+        
+        fig.text(0.02, 0.98, info_text, transform=fig.transFigure,
+                fontsize=10, verticalalignment='top',
+                bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.5))
+        
+        plt.tight_layout()
+        return fig
