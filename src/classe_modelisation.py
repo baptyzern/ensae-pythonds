@@ -186,10 +186,6 @@ class PipelineRegression:
         data_processed = data.copy()
         
         # Limiter le nombre de caractéristiques pour la lisibilité
-        if len(features) > 6:
-            warnings.warn(f"Le pair plot avec {len(features)} caractéristiques peut être illisible. "
-                         "Considérez-en utiliser moins.")
-            features = features[:6]
         
         # Création du pair plot
         plot_data = data_processed[features + [target]]
