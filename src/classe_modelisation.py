@@ -10,7 +10,7 @@ from statsmodels.stats.outliers_influence import variance_inflation_factor
 
 class PipelineRegression:
     """
-    Pipeline de modélisation de régression linéaire avec visualisations avancées.
+    Pipeline de modélisation de régression linéaire.
     
     Cette classe implémente une approche structurée et reproductible pour la
     modélisation statistique, inspirée des bonnes pratiques en science des données.
