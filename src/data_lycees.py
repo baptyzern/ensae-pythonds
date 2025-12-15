@@ -234,8 +234,15 @@ def get_data_lycees():
             'Ceintures urbaines',
             'Bourgs ruraux',
             'Rural à habitat dispersé',
-            # 'Rural à habitat très dispersé' # AUCUN LYCEE CONCERNE
+            'Rural à habitat très dispersé'  # AUCUN LYCEE CONCERNE
         ]
+    )
+    # En raison des faibles effectifs, on agrège certaines catégories 
+    annuaire_education['grille_densite_4'] = (
+        annuaire_education['grille_densite_texte']
+        .replace({'Rural à habitat dispersé': 'Bourgs ruraux'})
+        .replace({'Ceintures urbaines': 'Petites villes'})
+        .cat.remove_unused_categories()
     )
     annuaire_education['statut_public_prive'] = pd.Categorical(
         annuaire_education['statut_public_prive'],
