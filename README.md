@@ -27,15 +27,15 @@ Plus de détails sont donnés dans le notebook qui sert de rapport final
 
 ### Sources de données mobilisées
 
--   Indicateurs de résultats des lycées, sur data.education.gouv.fr
+-   *Indicateurs de résultats des lycées* 
 ([lien direct vers la source](https://data.education.gouv.fr/explore/dataset/fr-en-indicateurs-de-resultat-des-lycees-gt_v2/information/))
--   Indices de position sociale des lycées, sur data.education.gouv.fr
+-   *Indices de position sociale des lycées*, sur data.education.gouv.fr
 ([lien direct vers la source](https://data.education.gouv.fr/explore/dataset/fr-en-ips-lycees-ap2023/information/))
--   Annuaire de l'éducation, sur data.education.gouv.fr
+-   *Annuaire de l'éducation* 
 ([lien direct vers la source](https://data.education.gouv.fr/explore/dataset/fr-en-annuaire-education/information))
--   Annuaire général des établissements scolaires sur data.gouv.fr
+-   *Communes et villes de France* 
 ([lien direct vers la source](https://www.data.gouv.fr/datasets/communes-et-villes-de-france-en-csv-excel-json-parquet-et-feather/informations))
--   Fiches descriptives de bibliothèques (Répertoire du CCFr), sur api.bnf.fr
+-   *Fiches descriptives de bibliothèques issues du répertoire du CCFr* 
 ([lien direct vers la source](https://api.bnf.fr/index.php/fr/CCFr/Repertoire_Bibliotheques))
 
 ## Considérations techniques
