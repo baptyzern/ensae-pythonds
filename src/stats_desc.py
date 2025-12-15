@@ -70,3 +70,25 @@ def lycees_stat_desc_num(lycees_data):
     ])
 
     return lycees_stat_desc_num
+
+
+def lycees_stat_desc_bin(lycees_data):
+    df = (
+        lycees_data[[
+            'index',
+            'voie_technologique', 'voie_professionnelle',
+            'section_arts', 'section_cinema', 'section_theatre', 'section_sport',
+            'section_internationale', 'section_europeenne', 'post_bac'
+        ]]
+        .melt(
+            id_vars=['index'],
+        )
+        # .apply(pd.to_numeric, errors='coerce')
+    )
+    df['value'] = pd.to_numeric(df['value'], errors='coerce')
+
+    total = lycees_data.shape[0]
+    lycees_stat_desc_bin = df.groupby('variable')['value'].sum().reset_index()
+    lycees_stat_desc_bin['prop'] = lycees_stat_desc_bin['value'] / total
+
+    return lycees_stat_desc_bin

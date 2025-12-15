@@ -161,7 +161,8 @@ def get_data_lycees():
             'voie_generale', 'voie_technologique', 'voie_professionnelle',
             'section_arts', 'section_cinema', 'section_theatre', 'section_sport',
             'section_internationale', 'section_europeenne',
-            'lycee_agricole', 'lycee_militaire', 'lycee_des_metiers', 'post_bac',
+            # 'lycee_agricole', 'lycee_militaire', 'lycee_des_metiers',
+            'post_bac',
             ]
         )
     # Sauvegarde du CRS dans une variable à côté pour plus tard
@@ -234,13 +235,14 @@ def get_data_lycees():
             'Ceintures urbaines',
             'Bourgs ruraux',
             'Rural à habitat dispersé',
-            'Rural à habitat très dispersé'  # AUCUN LYCEE CONCERNE
+            'Rural à habitat très dispersé'
         ]
     )
     # En raison des faibles effectifs, on agrège certaines catégories 
     annuaire_education['grille_densite_4'] = (
         annuaire_education['grille_densite_texte']
         .replace({'Rural à habitat dispersé': 'Bourgs ruraux'})
+        .replace({'Rural à habitat très dispersé': 'Bourgs ruraux'})
         .replace({'Ceintures urbaines': 'Petites villes'})
         .cat.remove_unused_categories()
     )
