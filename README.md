@@ -29,7 +29,7 @@ Plus de détails sont donnés dans le notebook qui sert de rapport final
 
 -   *Indicateurs de résultats des lycées* 
 ([lien direct vers la source](https://data.education.gouv.fr/explore/dataset/fr-en-indicateurs-de-resultat-des-lycees-gt_v2/information/))
--   *Indices de position sociale des lycées*, sur data.education.gouv.fr
+-   *Indices de position sociale des lycées*
 ([lien direct vers la source](https://data.education.gouv.fr/explore/dataset/fr-en-ips-lycees-ap2023/information/))
 -   *Annuaire de l'éducation* 
 ([lien direct vers la source](https://data.education.gouv.fr/explore/dataset/fr-en-annuaire-education/information))
