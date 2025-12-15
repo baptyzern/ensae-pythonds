@@ -286,6 +286,14 @@ def merge_data_lycees(lycees_resultats, lycees_ips, annuaire_education):
     )
     # On perd 3 lycées (?)
 
+    # Re-conversion en gdf, et changement de CRS
+    lycees_data = gpd.GeoDataFrame(lycees_data, geometry='position', crs=annuaire_education.crs)
+    lycees_data = lycees_data.to_crs(epsg=2154)
+
+    return lycees_data
+
+
+def filter_data_lycees(lycees_data):
     # Filtre pour sélectionner les lycées ayant suffisamment de candidats
     seuil_effectifs = 50
     lycees_data = lycees_data[lycees_data['presents_gnle'] >= seuil_effectifs]
@@ -296,9 +304,6 @@ def merge_data_lycees(lycees_resultats, lycees_ips, annuaire_education):
         '94'  # Corse
         ]
     lycees_data = lycees_data[~lycees_data['code_region'].isin(regions_hors_hexagone)]
-
-    # Re-conversion en gdf, et changement de CRS
-    lycees_data = gpd.GeoDataFrame(lycees_data, geometry='position', crs=annuaire_education.crs)
-    lycees_data = lycees_data.to_crs(epsg=2154)
+    lycees_data = lycees_data.reset_index()
 
     return lycees_data
