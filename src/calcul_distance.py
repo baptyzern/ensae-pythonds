@@ -1,5 +1,6 @@
 import geopandas as gpd
 
+
 def calcul_distance(lycees, biblio):
     # Projection en Lambert 93
     lyc = lycees.to_crs("EPSG:2154")
@@ -12,5 +13,7 @@ def calcul_distance(lycees, biblio):
         how="left",
         distance_col="dist_proche_biblio_m"
     )
+
+    lyc_proches['dist_proche_biblio_m'] = lyc_proches['dist_proche_biblio_m'].round()
 
     return lyc_proches

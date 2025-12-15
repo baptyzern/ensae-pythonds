@@ -1,5 +1,6 @@
 import geopandas as gpd
 
+
 def calcul_biblio_rayons(lycees, biblio, rayons=(500, 1000, 2000, 5000)):
     # Projection
     lyc = lycees.to_crs("EPSG:2154")

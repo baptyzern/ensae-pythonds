@@ -43,13 +43,13 @@ def extraire_xml_biblio(file):
         temp["CONDITIONACCES_d"] = get_xml_value(fields, "ACCES_SEL/CONDITIONACCES", "display")
 
         # temp["TYPEETABABES"] = get_xml_value(fields, "DID_SEL/TYPEETABABES")
-        temp["TYPEETABABES_d"] = get_xml_value(fields, "DID_SEL/TYPEETABABES", "display")
+        # temp["TYPEETABABES_d"] = get_xml_value(fields, "DID_SEL/TYPEETABABES", "display")
 
         # temp["TYPEFAMABES"] = get_xml_value(fields, "DID_SEL/TYPEFAMABES")
         temp["TYPEFAMABES_d"] = get_xml_value(fields, "DID_SEL/TYPEFAMABES", "display")
 
         # temp["TYPEINST"] = get_xml_value(fields, "DID_SEL/TYPEINST")
-        temp["TYPEINST_d"] = get_xml_value(fields, "DID_SEL/TYPEINST", "display")
+        # temp["TYPEINST_d"] = get_xml_value(fields, "DID_SEL/TYPEINST", "display")
 
         bibliotheques.append(temp)
 

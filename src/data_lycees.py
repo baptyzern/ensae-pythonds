@@ -16,10 +16,10 @@ def get_data_lycees():
     # Données sur les résultats         ------------------------------------------------------------
 
     url_lycees_resultats = link_api_depp + "fr-en-indicateurs-de-resultat-des-lycees-gt_v2/exports/parquet?lang=fr&timezone=Europe%2FBerlin"
-    
+
     if not os.path.exists("data/lycees_resultats.parquet"):
         download_file(url_lycees_resultats, "data/lycees_resultats.parquet")
-    
+
     lycees_resultats = pd.read_parquet(
         path="data/lycees_resultats.parquet",
         columns=[
@@ -133,12 +133,15 @@ def get_data_lycees():
         columns=[
             'identifiant_de_l_etablissement',
             'nom_etablissement',
+            'position', 'latitude', 'longitude',
             # 'telephone', 'fax', 'web', 'mail',
             # 'adresse_1', 'adresse_2', 'adresse_3', 'code_postal',
             'code_commune', 'code_departement', 'code_academie', 'code_region',
             'nom_commune', 'libelle_departement', 'libelle_academie', 'libelle_region',
             # 'code_circonscription', 'nom_circonscription',
             # 'siren_siret', 'nombre_d_eleves', 'fiche_onisep',
+            # 'coordx_origine', 'coordy_origine', 'epsg_origine',
+            # 'precision_localisation',
 
             # 'date_ouverture', 'date_maj_ligne', 'etat', 'ministere_tutelle',
             # 'multi_uai', 'code_type_contrat_prive',
@@ -146,36 +149,109 @@ def get_data_lycees():
             # 'etablissement_mere', 'type_rattachement_etablissement_mere',
             # 'code_zone_animation_pedagogique', 'libelle_zone_animation_pedagogique',
             # 'code_bassin_formation', 'libelle_bassin_formation'
-            'type_etablissement', 'statut_public_prive', 'type_contrat_prive',
+            'type_etablissement', 'statut_public_prive',
+            # 'type_contrat_prive',
             # 'ecole_maternelle', 'ecole_elementaire',
             # 'rpi_concentre', 'rpi_disperse',
 
             'restauration', 'hebergement',
-            'ulis', 'apprentissage', 'segpa', 'appartenance_education_prioritaire',
-            'greta', 'pial',
+            # 'ulis', 'apprentissage', 'segpa', 'appartenance_education_prioritaire',
+            # 'greta', 'pial',
 
-            'voie_generale', 'voie_technologique', 'voie_professionnelle', 
+            'voie_generale', 'voie_technologique', 'voie_professionnelle',
             'section_arts', 'section_cinema', 'section_theatre', 'section_sport',
             'section_internationale', 'section_europeenne',
             'lycee_agricole', 'lycee_militaire', 'lycee_des_metiers', 'post_bac',
-
-            'position', 'latitude', 'longitude',
-            # 'coordx_origine', 'coordy_origine', 'epsg_origine',
-            # 'precision_localisation',
-        ]
+            ]
         )
+    # Sauvegarde du CRS dans une variable à côté pour plus tard
     annuaire_crs = annuaire_education.crs
 
+    # Avoir des noms de variables cohérents entre bases
     annuaire_education = annuaire_education.rename(columns={
         'identifiant_de_l_etablissement': 'uai',
         'nom_etablissement': 'libelle_etablissement',
         })
+
+    # Filtre pour n'avoir qu'une ligne par lycée
     annuaire_education['is_annexe'] = annuaire_education['libelle_etablissement'].str.contains('annexe')
     annuaire_education = annuaire_education[~annuaire_education['is_annexe']]
     annuaire_education = annuaire_education.drop(columns='is_annexe')
 
     # Certains établissements sont en double (car rattaché à plusieurs communes qui ont fusionné)
-    annuaire_education = annuaire_education.groupby('uai').first()
+    annuaire_education = annuaire_education.groupby('uai').first().reset_index()
+
+    # Rajout de l'information sur la densité de la commune
+    commune_url = "https://object.files.data.gouv.fr/hydra-parquet/hydra-parquet/1f4841ac6cc0313803cabfa2c7ca4d37.parquet"
+
+    if not os.path.exists("data/annuaire_communes.parquet"):
+        download_file(commune_url, "data/annuaire_communes.parquet")
+    annuaire_communes = pd.read_parquet(
+        'data/annuaire_communes.parquet',
+        columns=[
+            # 'Unnamed: 0',
+            'code_insee',
+            # 'nom_standard', 'nom_sans_pronom', 'nom_a', 'nom_de',
+            # 'nom_sans_accent', 'nom_standard_majuscule', 'typecom', 'typecom_texte', 'reg_code',
+            # 'reg_nom', 'dep_code', 'dep_nom', 'canton_code', 'canton_nom', 'epci_code', 'epci_nom',
+            # 'academie_code', 'academie_nom', 'code_postal', 'codes_postaux', 'zone_emploi',
+            # 'code_insee_centre_zone_emploi', 'code_unite_urbaine', 'nom_unite_urbaine',
+            # 'taille_unite_urbaine', 'type_commune_unite_urbaine', 'statut_commune_unite_urbaine',
+            # 'population', 'superficie_hectare', 'superficie_km2', 'densite', 'altitude_moyenne',
+            # 'altitude_minimale', 'altitude_maximale', 'latitude_mairie', 'longitude_mairie',
+            # 'latitude_centre', 'longitude_centre',
+            # 'grille_densite',
+            'grille_densite_texte',
+            # 'niveau_equipements_services', 'niveau_equipements_services_texte', 'gentile',
+            # 'url_wikipedia'
+            ]
+        )
+
+    annuaire_communes = annuaire_communes.rename(columns={
+        'code_insee': 'code_commune',
+        })
+
+    annuaire_education = annuaire_education.merge(
+        annuaire_communes,
+        on='code_commune',
+        how='left'
+    )
+
+    # Le code commune utilisé dans l'annuaire des communes ne prend pas
+    # en compte l'arrondissement (contrairement au code commune dans
+    # l'annuaire de l'éducation) -> correction pour Paris, Lyon et Marseille
+    etab_ville_arr = annuaire_education['nom_commune'].isin(['Marseille', 'Paris', 'Lyon'])
+    annuaire_education.loc[etab_ville_arr, 'grille_densite_texte'] = 'Grands centres urbains'
+
+    # Transformations en variables catégorielles
+    annuaire_education['grille_densite_texte'] = pd.Categorical(
+        annuaire_education['grille_densite_texte'],
+        ordered=True,
+        categories=[
+            'Grands centres urbains',
+            'Centres urbains intermédiaires',
+            'Petites villes',
+            'Ceintures urbaines',
+            'Bourgs ruraux',
+            'Rural à habitat dispersé',
+            'Rural à habitat très dispersé'  # AUCUN LYCEE CONCERNE
+        ]
+    )
+    # En raison des faibles effectifs, on agrège certaines catégories 
+    annuaire_education['grille_densite_4'] = (
+        annuaire_education['grille_densite_texte']
+        .replace({'Rural à habitat dispersé': 'Bourgs ruraux'})
+        .replace({'Ceintures urbaines': 'Petites villes'})
+        .cat.remove_unused_categories()
+    )
+    annuaire_education['statut_public_prive'] = pd.Categorical(
+        annuaire_education['statut_public_prive'],
+        ordered=True,
+        categories=[
+            'Public',
+            'Privé'
+        ]
+    )
 
     # Perte du CRS avec le groupby.first (bug ?)
     annuaire_education.crs = annuaire_crs
