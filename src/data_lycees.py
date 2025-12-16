@@ -44,14 +44,12 @@ def get_data_lycees():
         'taux_reu_gnle',
         # 'taux_reu_sti2d', 'taux_reu_std2a', 'taux_reu_stmg', 'taux_reu_stl',
         # 'taux_reu_st2s', 'taux_reu_s2tmd', 'taux_reu_sthr',
-        # 'va_reu_l', 'va_reu_es', 'va_reu_s',
-        'va_reu_gnle',
+        # 'va_reu_l', 'va_reu_es', 'va_reu_s', 'va_reu_gnle',
         # 'va_reu_sti2d', 'va_reu_std2a', 'va_reu_stmg', 'va_reu_stl',
         # 'va_reu_st2s', 'va_reu_s2tmd', 'va_reu_sthr'
         # 'taux_men_l', 'taux_men_es', 'taux_men_s',
         'taux_men_gnle',
-        # 'va_men_l', 'va_men_es', 'va_men_s',
-        'va_men_gnle',
+        # 'va_men_l', 'va_men_es', 'va_men_s', 'va_men_gnle',
         # 'taux_men_sti2d', 'taux_men_std2a', 'taux_men_stmg', 'taux_men_stl',
         # 'taux_men_st2s', 'taux_men_s2tmd', 'taux_men_sthr',
         # 'va_men_sti2d', 'va_men_std2a', 'va_men_stmg', 'va_men_stl',
@@ -66,9 +64,7 @@ def get_data_lycees():
     # Changement des types des variables
     lycees_resultats['presents_gnle'] = pd.to_numeric(lycees_resultats['presents_gnle'], errors='coerce')
     lycees_resultats['taux_reu_gnle'] = pd.to_numeric(lycees_resultats['taux_reu_gnle'], errors='coerce')
-    lycees_resultats['va_reu_gnle'] = pd.to_numeric(lycees_resultats['va_reu_gnle'], errors='coerce')
     lycees_resultats['taux_men_gnle'] = pd.to_numeric(lycees_resultats['taux_men_gnle'], errors='coerce')
-    lycees_resultats['va_men_gnle'] = pd.to_numeric(lycees_resultats['va_men_gnle'], errors='coerce')
 
     lycees_resultats['annee'] = lycees_resultats['annee'].astype(str).str[0:4].astype(int)
     lycees_resultats = lycees_resultats.sort_values(["uai", "annee"])
@@ -148,7 +144,7 @@ def get_data_lycees():
         # 'ecole_maternelle', 'ecole_elementaire',
         # 'rpi_concentre', 'rpi_disperse',
 
-        'restauration', 'hebergement',
+        # 'restauration', 'hebergement',
         # 'ulis', 'apprentissage', 'segpa', 'appartenance_education_prioritaire',
         # 'greta', 'pial',
 
