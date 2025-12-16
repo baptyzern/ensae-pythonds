@@ -8,61 +8,59 @@ def get_data_lycees():
 
     # Téléchargement des fichiers         ----------------------------------------------------------
 
-    link_api_depp = "https://data.education.gouv.fr/api/explore/v2.1/catalog/datasets/"
+    api_depp_url = "https://data.education.gouv.fr/api/explore/v2.1/catalog/datasets/"
+    api_depp_req = "/exports/parquet?lang=fr&timezone=Europe%2FBerlin"
 
     if not os.path.exists("data/"):
         os.mkdir("data/")
 
     # Données sur les résultats         ------------------------------------------------------------
 
-    url_lycees_resultats = link_api_depp + "fr-en-indicateurs-de-resultat-des-lycees-gt_v2/exports/parquet?lang=fr&timezone=Europe%2FBerlin"
+    ref_lycees_resultats = "fr-en-indicateurs-de-resultat-des-lycees-gt_v2"
+    url_lycees_resultats = api_depp_url + ref_lycees_resultats + api_depp_req
 
     if not os.path.exists("data/lycees_resultats.parquet"):
         download_file(url_lycees_resultats, "data/lycees_resultats.parquet")
 
+    col_lycees_resultats = [
+        'uai', 'annee',
+
+        # 'eff_2nde', 'eff_1ere', 'eff_term',
+        # 'presents_total',
+        # 'presents_l', 'presents_es', 'presents_s',
+        'presents_gnle',
+        # 'presents_sti2d', 'presents_std2a', 'presents_stmg', 'presents_stl'
+        # 'presents_st2s', 'presents_s2tmd', 'presents_sthr',
+        # 'nb_mentions_tb_avecf_g', 'nb_mentions_tb_sansf_g',
+        # 'nb_mentions_b_g', 'nb_mentions_ab_g',
+        # 'nb_mentions_tb_avecf_t', 'nb_mentions_tb_sansf_t',
+        # 'nb_mentions_b_t', 'nb_mentions_ab_t',
+        # 'taux_acces_2nde', 'va_acces_2nde',
+        # 'taux_acces_1ere', 'va_acces_1ere',
+        # 'taux_acces_term', 'va_acces_term'
+
+        # 'taux_reu_total', 'va_reu_total',
+        # 'taux_reu_l', 'taux_reu_es', 'taux_reu_s',
+        'taux_reu_gnle',
+        # 'taux_reu_sti2d', 'taux_reu_std2a', 'taux_reu_stmg', 'taux_reu_stl',
+        # 'taux_reu_st2s', 'taux_reu_s2tmd', 'taux_reu_sthr',
+        # 'va_reu_l', 'va_reu_es', 'va_reu_s',
+        'va_reu_gnle',
+        # 'va_reu_sti2d', 'va_reu_std2a', 'va_reu_stmg', 'va_reu_stl',
+        # 'va_reu_st2s', 'va_reu_s2tmd', 'va_reu_sthr'
+        # 'taux_men_l', 'taux_men_es', 'taux_men_s',
+        'taux_men_gnle',
+        # 'va_men_l', 'va_men_es', 'va_men_s',
+        'va_men_gnle',
+        # 'taux_men_sti2d', 'taux_men_std2a', 'taux_men_stmg', 'taux_men_stl',
+        # 'taux_men_st2s', 'taux_men_s2tmd', 'taux_men_sthr',
+        # 'va_men_sti2d', 'va_men_std2a', 'va_men_stmg', 'va_men_stl',
+        # 'va_men_st2s', 'va_men_s2tmd', 'va_men_sthr'
+    ]
+
     lycees_resultats = pd.read_parquet(
         path="data/lycees_resultats.parquet",
-        columns=[
-            'uai', 'annee',
-            # 'libelle_uai',
-            # 'code_region', 'libelle_region',
-            # 'libelle_academie',
-            # 'code_departement', 'libelle_departement',
-            # 'code_commune', 'libelle_commune',
-            # 'secteur'
-
-            # 'eff_2nde', 'eff_1ere', 'eff_term',
-            # 'presents_total',
-            # 'presents_l', 'presents_es', 'presents_s',
-            'presents_gnle',
-            # 'presents_sti2d', 'presents_std2a', 'presents_stmg', 'presents_stl'
-            # 'presents_st2s', 'presents_s2tmd', 'presents_sthr',
-            # 'nb_mentions_tb_avecf_g', 'nb_mentions_tb_sansf_g',
-            # 'nb_mentions_b_g', 'nb_mentions_ab_g',
-            # 'nb_mentions_tb_avecf_t', 'nb_mentions_tb_sansf_t',
-            # 'nb_mentions_b_t', 'nb_mentions_ab_t',
-            # 'taux_acces_2nde', 'va_acces_2nde',
-            # 'taux_acces_1ere', 'va_acces_1ere',
-            # 'taux_acces_term', 'va_acces_term'
-
-            # 'taux_reu_total', 'va_reu_total',
-            # 'taux_reu_l', 'taux_reu_es', 'taux_reu_s',
-            'taux_reu_gnle',
-            # 'taux_reu_sti2d', 'taux_reu_std2a', 'taux_reu_stmg', 'taux_reu_stl',
-            # 'taux_reu_st2s', 'taux_reu_s2tmd', 'taux_reu_sthr',
-            # 'va_reu_l', 'va_reu_es', 'va_reu_s',
-            'va_reu_gnle',
-            # 'va_reu_sti2d', 'va_reu_std2a', 'va_reu_stmg', 'va_reu_stl',
-            # 'va_reu_st2s', 'va_reu_s2tmd', 'va_reu_sthr'
-            # 'taux_men_l', 'taux_men_es', 'taux_men_s',
-            'taux_men_gnle',
-            # 'va_men_l', 'va_men_es', 'va_men_s',
-            'va_men_gnle',
-            # 'taux_men_sti2d', 'taux_men_std2a', 'taux_men_stmg', 'taux_men_stl',
-            # 'taux_men_st2s', 'taux_men_s2tmd', 'taux_men_sthr',
-            # 'va_men_sti2d', 'va_men_std2a', 'va_men_stmg', 'va_men_stl',
-            # 'va_men_st2s', 'va_men_s2tmd', 'va_men_sthr'
-        ]
+        columns=col_lycees_resultats
         )
 
     # Changement des types des variables
@@ -78,39 +76,36 @@ def get_data_lycees():
 
     # Données sur les IPS         ------------------------------------------------------------------
 
-    url_lycees_ips = link_api_depp + "fr-en-ips-lycees-ap2023/exports/parquet?lang=fr&timezone=Europe%2FBerlin"
+    ref_lycees_ips = "fr-en-ips-lycees-ap2023"
+    url_lycees_ips = api_depp_url + ref_lycees_ips + api_depp_req
 
     if not os.path.exists("data/lycees_ips.parquet"):
         download_file(url_lycees_ips, "data/lycees_ips.parquet")
 
+    col_lycees_ips = [
+        'uai', 'rentree_scolaire',
+
+        'ips_voie_gt',
+        # 'ips_voie_pro', 'ips_post_bac', 'ips_etab',
+        'ecart_type_voie_gt',
+        # 'ecart_type_voie_pro', 'ecart_type_etablissement',
+        # 'ips_national_legt', # 'ips_national_lpo', 'ips_national_lp',
+        # 'ips_national_legt_prive', 'ips_national_legt_public',
+        # 'ips_national_lpo_prive', 'ips_national_lpo_public',
+        # 'ips_national_lp_prive', 'ips_national_lp_public',
+        # 'ips_academique_legt', 'ips_academique_lpo', 'ips_academique_lp',
+        # 'ips_academique_legt_prive', 'ips_academique_legt_public',
+        # 'ips_academique_lpo_prive', 'ips_academique_lpo_public',
+        # 'ips_academique_lp_prive', 'ips_academique_lp_public',
+        # 'ips_departemental_legt', 'ips_departemental_lpo', 'ips_departemental_lp',
+        # 'ips_departemental_legt_prive', 'ips_departemental_legt_public',
+        # 'ips_departemental_lpo_prive', 'ips_departemental_lpo_public',
+        # 'ips_departemental_lp_prive', 'ips_departemental_lp_public'
+    ]
+
     lycees_ips = pd.read_parquet(
         path="data/lycees_ips.parquet",
-        columns=[
-            'uai', 'rentree_scolaire',
-            # 'nom_de_l_etablissement',
-            # 'secteur', 'type_de_lycee',
-            # 'code_region', 'region_academique',
-            # 'code_academie', 'academie',
-            # 'code_du_departement', 'departement',
-            # 'code_insee_de_la_commune', 'nom_de_la_commune',
-
-            'ips_voie_gt',
-            # 'ips_voie_pro', 'ips_post_bac', 'ips_etab',
-            'ecart_type_voie_gt',
-            # 'ecart_type_voie_pro', 'ecart_type_etablissement',
-            # 'ips_national_legt', # 'ips_national_lpo', 'ips_national_lp',
-            # 'ips_national_legt_prive', 'ips_national_legt_public',
-            # 'ips_national_lpo_prive', 'ips_national_lpo_public',
-            # 'ips_national_lp_prive', 'ips_national_lp_public',
-            # 'ips_academique_legt', 'ips_academique_lpo', 'ips_academique_lp',
-            # 'ips_academique_legt_prive', 'ips_academique_legt_public',
-            # 'ips_academique_lpo_prive', 'ips_academique_lpo_public',
-            # 'ips_academique_lp_prive', 'ips_academique_lp_public',
-            # 'ips_departemental_legt', 'ips_departemental_lpo', 'ips_departemental_lp',
-            # 'ips_departemental_legt_prive', 'ips_departemental_legt_public',
-            # 'ips_departemental_lpo_prive', 'ips_departemental_lpo_public',
-            # 'ips_departemental_lp_prive', 'ips_departemental_lp_public'
-        ]
+        columns=col_lycees_ips
         )
 
     lycees_ips['ips_voie_gt'] = pd.to_numeric(lycees_ips['ips_voie_gt'], errors='coerce')
@@ -123,47 +118,50 @@ def get_data_lycees():
 
     # Données de l'annuaire de l'éducation         -------------------------------------------------
 
-    url_annuaire_education = link_api_depp + "fr-en-annuaire-education/exports/parquet?lang=fr&timezone=Europe%2FBerlin"
+    ref_annuaire_education = "fr-en-annuaire-education"
+    url_annuaire_education = api_depp_url + ref_annuaire_education + api_depp_req
 
     if not os.path.exists("data/annuaire_education.parquet"):
         download_file(url_annuaire_education, "data/annuaire_education.parquet")
 
+    col_annuaire_education = [
+        'identifiant_de_l_etablissement',
+        'nom_etablissement',
+        'position', 'latitude', 'longitude',
+        # 'telephone', 'fax', 'web', 'mail',
+        # 'adresse_1', 'adresse_2', 'adresse_3', 'code_postal',
+        'code_commune', 'code_departement', 'code_academie', 'code_region',
+        'nom_commune', 'libelle_departement', 'libelle_academie', 'libelle_region',
+        # 'code_circonscription', 'nom_circonscription',
+        # 'siren_siret', 'nombre_d_eleves', 'fiche_onisep',
+        # 'coordx_origine', 'coordy_origine', 'epsg_origine',
+        # 'precision_localisation',
+
+        # 'date_ouverture', 'date_maj_ligne', 'etat', 'ministere_tutelle',
+        # 'multi_uai', 'code_type_contrat_prive',
+        # 'code_nature', 'libelle_nature',
+        # 'etablissement_mere', 'type_rattachement_etablissement_mere',
+        # 'code_zone_animation_pedagogique', 'libelle_zone_animation_pedagogique',
+        # 'code_bassin_formation', 'libelle_bassin_formation'
+        'type_etablissement', 'statut_public_prive',
+        # 'type_contrat_prive',
+        # 'ecole_maternelle', 'ecole_elementaire',
+        # 'rpi_concentre', 'rpi_disperse',
+
+        'restauration', 'hebergement',
+        # 'ulis', 'apprentissage', 'segpa', 'appartenance_education_prioritaire',
+        # 'greta', 'pial',
+
+        'voie_generale', 'voie_technologique', 'voie_professionnelle',
+        'section_arts', 'section_cinema', 'section_theatre', 'section_sport',
+        'section_internationale', 'section_europeenne',
+        # 'lycee_agricole', 'lycee_militaire', 'lycee_des_metiers',
+        'post_bac',
+    ]
+
     annuaire_education = gpd.read_parquet(
         path="data/annuaire_education.parquet",
-        columns=[
-            'identifiant_de_l_etablissement',
-            'nom_etablissement',
-            'position', 'latitude', 'longitude',
-            # 'telephone', 'fax', 'web', 'mail',
-            # 'adresse_1', 'adresse_2', 'adresse_3', 'code_postal',
-            'code_commune', 'code_departement', 'code_academie', 'code_region',
-            'nom_commune', 'libelle_departement', 'libelle_academie', 'libelle_region',
-            # 'code_circonscription', 'nom_circonscription',
-            # 'siren_siret', 'nombre_d_eleves', 'fiche_onisep',
-            # 'coordx_origine', 'coordy_origine', 'epsg_origine',
-            # 'precision_localisation',
-
-            # 'date_ouverture', 'date_maj_ligne', 'etat', 'ministere_tutelle',
-            # 'multi_uai', 'code_type_contrat_prive',
-            # 'code_nature', 'libelle_nature',
-            # 'etablissement_mere', 'type_rattachement_etablissement_mere',
-            # 'code_zone_animation_pedagogique', 'libelle_zone_animation_pedagogique',
-            # 'code_bassin_formation', 'libelle_bassin_formation'
-            'type_etablissement', 'statut_public_prive',
-            # 'type_contrat_prive',
-            # 'ecole_maternelle', 'ecole_elementaire',
-            # 'rpi_concentre', 'rpi_disperse',
-
-            'restauration', 'hebergement',
-            # 'ulis', 'apprentissage', 'segpa', 'appartenance_education_prioritaire',
-            # 'greta', 'pial',
-
-            'voie_generale', 'voie_technologique', 'voie_professionnelle',
-            'section_arts', 'section_cinema', 'section_theatre', 'section_sport',
-            'section_internationale', 'section_europeenne',
-            # 'lycee_agricole', 'lycee_militaire', 'lycee_des_metiers',
-            'post_bac',
-            ]
+        columns=col_annuaire_education
         )
     # Sauvegarde du CRS dans une variable à côté pour plus tard
     annuaire_crs = annuaire_education.crs
@@ -183,29 +181,32 @@ def get_data_lycees():
     annuaire_education = annuaire_education.groupby('uai').first().reset_index()
 
     # Rajout de l'information sur la densité de la commune
-    commune_url = "https://object.files.data.gouv.fr/hydra-parquet/hydra-parquet/1f4841ac6cc0313803cabfa2c7ca4d37.parquet"
+    api_datagouv_url = "https://object.files.data.gouv.fr/hydra-parquet/hydra-parquet/"
+    ref_annuaire_communes = "1f4841ac6cc0313803cabfa2c7ca4d37.parquet"
+    url_annuaire_communes = api_datagouv_url + ref_annuaire_communes
+
+    col_annuaire_communes = [
+        'code_insee',
+        # 'nom_standard', 'nom_sans_pronom', 'nom_a', 'nom_de',
+        # 'nom_sans_accent', 'nom_standard_majuscule', 'typecom', 'typecom_texte', 'reg_code',
+        # 'reg_nom', 'dep_code', 'dep_nom', 'canton_code', 'canton_nom', 'epci_code', 'epci_nom',
+        # 'academie_code', 'academie_nom', 'code_postal', 'codes_postaux', 'zone_emploi',
+        # 'code_insee_centre_zone_emploi', 'code_unite_urbaine', 'nom_unite_urbaine',
+        # 'taille_unite_urbaine', 'type_commune_unite_urbaine', 'statut_commune_unite_urbaine',
+        # 'population', 'superficie_hectare', 'superficie_km2', 'densite', 'altitude_moyenne',
+        # 'altitude_minimale', 'altitude_maximale', 'latitude_mairie', 'longitude_mairie',
+        # 'latitude_centre', 'longitude_centre',
+        # 'grille_densite',
+        'grille_densite_texte',
+        # 'niveau_equipements_services', 'niveau_equipements_services_texte', 'gentile',
+        # 'url_wikipedia'
+    ]
 
     if not os.path.exists("data/annuaire_communes.parquet"):
-        download_file(commune_url, "data/annuaire_communes.parquet")
+        download_file(url_annuaire_communes, "data/annuaire_communes.parquet")
     annuaire_communes = pd.read_parquet(
         'data/annuaire_communes.parquet',
-        columns=[
-            # 'Unnamed: 0',
-            'code_insee',
-            # 'nom_standard', 'nom_sans_pronom', 'nom_a', 'nom_de',
-            # 'nom_sans_accent', 'nom_standard_majuscule', 'typecom', 'typecom_texte', 'reg_code',
-            # 'reg_nom', 'dep_code', 'dep_nom', 'canton_code', 'canton_nom', 'epci_code', 'epci_nom',
-            # 'academie_code', 'academie_nom', 'code_postal', 'codes_postaux', 'zone_emploi',
-            # 'code_insee_centre_zone_emploi', 'code_unite_urbaine', 'nom_unite_urbaine',
-            # 'taille_unite_urbaine', 'type_commune_unite_urbaine', 'statut_commune_unite_urbaine',
-            # 'population', 'superficie_hectare', 'superficie_km2', 'densite', 'altitude_moyenne',
-            # 'altitude_minimale', 'altitude_maximale', 'latitude_mairie', 'longitude_mairie',
-            # 'latitude_centre', 'longitude_centre',
-            # 'grille_densite',
-            'grille_densite_texte',
-            # 'niveau_equipements_services', 'niveau_equipements_services_texte', 'gentile',
-            # 'url_wikipedia'
-            ]
+        columns=col_annuaire_communes
         )
 
     annuaire_communes = annuaire_communes.rename(columns={
