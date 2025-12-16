@@ -50,8 +50,7 @@ def lycees_stat_desc_num(lycees_data):
     lycees_stat_desc_num = lycees_data.melt(
         id_vars=['uai'],
         value_vars=[
-            'taux_reu_gnle', 'va_reu_gnle',
-            'taux_men_gnle', 'va_men_gnle',
+            'taux_reu_gnle', 'taux_men_gnle',
             'ips_voie_gt', 'ecart_type_voie_gt'
         ]
     )
@@ -60,13 +59,12 @@ def lycees_stat_desc_num(lycees_data):
         lycees_stat_desc_num['variable'],
         ordered=True,
         categories=[
-            'taux_reu_gnle', 'taux_men_gnle', 'ips_voie_gt',
-            'va_reu_gnle', 'va_men_gnle', 'ecart_type_voie_gt'
+            'taux_reu_gnle', 'ips_voie_gt',
+            'taux_men_gnle', 'ecart_type_voie_gt'
         ]
     ).rename_categories([
-        'Taux de réussite (%)', 'Taux de mention (%)',
-        'Indice de position sociale', 'Valeur ajoutée du\ntaux de réussite',
-        'Valeur ajoutée du\ntaux de mention', 'Ecart-type de l\'IPS'
+        'Taux de réussite (%)', 'Indice de position sociale',
+        'Taux de mention (%)', 'Ecart-type de l\'IPS'
     ])
 
     return lycees_stat_desc_num
@@ -78,14 +76,25 @@ def lycees_stat_desc_bin(lycees_data):
             'index',
             'voie_technologique', 'voie_professionnelle',
             'section_arts', 'section_cinema', 'section_theatre', 'section_sport',
-            'section_internationale', 'section_europeenne', 'post_bac'
+            'section_europeenne', 'post_bac'
         ]]
         .melt(
             id_vars=['index'],
         )
-        # .apply(pd.to_numeric, errors='coerce')
     )
     df['value'] = pd.to_numeric(df['value'], errors='coerce')
+
+    df['variable'] = (
+        df['variable']
+        .replace('voie_technologique', 'Voie\ntechnologique')
+        .replace('voie_professionnelle', 'Voie\nprofessionnelle')
+        .replace('section_sport', 'Section\nsport')
+        .replace('section_theatre', 'Section\nthéâtre')
+        .replace('section_europeenne', 'Section\neuropéenne')
+        .replace('section_cinema', 'Section\ncinéma')
+        .replace('section_arts', 'Section\narts')
+        .replace('post_bac', 'Formations\npost-bac')
+    )
 
     total = lycees_data.shape[0]
     lycees_stat_desc_bin = df.groupby('variable')['value'].sum().reset_index()

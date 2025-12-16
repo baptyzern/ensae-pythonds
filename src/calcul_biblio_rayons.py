@@ -36,5 +36,19 @@ def calcul_biblio_rayons(lycees, biblio, rayons=(500, 1000, 2000, 5000)):
         )
 
         result[f"nb_biblio_{r}"] = result[f"nb_biblio_{r}"].fillna(0)
+        result[f"dummy_biblio_{r}"] = result[f"nb_biblio_{r}"] > 0
+
+    return result
+
+
+def correction_biblio_rayons(lycees, rayons=(500, 1000, 2000, 5000)):
+
+    result = lycees.copy()
+
+    # Pour limiter les valeurs extrêmes, on borne le nombre de bibliothèques
+    # au 95e percentile de sa distribution
+    for r in rayons:
+        p95 = result[f'nb_biblio_{r}'].quantile(q=0.95)
+        result[f'nb_biblio_{r}'] = result[f'nb_biblio_{r}'].clip(upper=p95)
 
     return result
