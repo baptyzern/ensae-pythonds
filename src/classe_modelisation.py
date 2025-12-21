@@ -8,13 +8,18 @@ from typing import List, Optional, Union, Dict, Any, Tuple
 import warnings
 from statsmodels.stats.outliers_influence import variance_inflation_factor
 import matplotlib.gridspec as gridspec
+from scipy import stats
+import statsmodels.api as sm
+from scipy.stats import chi2_contingency, pointbiserialr
+import itertools
 
 class PipelineRegression:
     """
-    Pipeline de modélisation de régression linéaire.
+    Pipeline de modélisation de régression linéaire avec gestion étendue des variables catégorielles.
     
-    Cette classe implémente une approche structurée et reproductible pour la
-    modélisation statistique, inspirée des bonnes pratiques en science des données.
+    Cette classe implémente une approche structurée pour l'analyse exploratoire,
+    le diagnostic et la modélisation statistique, adaptée aux jeux de données
+    avec des variables mixtes (catégorielles et continues).
     
     Attributs
     ---------
@@ -28,13 +33,14 @@ class PipelineRegression:
         Standardiseur pour les variables explicatives
     standardisation : bool
         Indicateur de standardisation des données
-    stepwise_best : statsmodels.regression.linear_model.RegressionResultsWrapper
-        Meilleur modèle de la sélection stepwise
-        
-    Références (Travaux de Lino Galiana)
-    ------------------------------------
-    - https://pythonds.linogaliana.fr
-    - https://doi.org/10.5281/zenodo.8229676
+    feature_names : List[str]
+        Noms des caractéristiques utilisées
+    target_name : str
+        Nom de la variable cible
+    cat_features : List[str]
+        Liste des variables catégorielles
+    num_features : List[str]
+        Liste des variables numériques
     """
     
     def __init__(self):
@@ -46,117 +52,205 @@ class PipelineRegression:
         self.scaler = StandardScaler()
         self.feature_names = None
         self.target_name = None
-        self.stepwise_best = None
+        self.cat_features = []
+        self.num_features = []
         
         # Configuration globale des styles
         plt.style.use('seaborn-v0_8-whitegrid')
+        sns.set_palette("husl")
+        
+        # Palette de couleurs professionnelle
         self.colors = {
-            'primary': '#2E86AB',
-            'secondary': '#A23B72',
-            'accent': '#F18F01',
-            'dark': '#2D3047',
-            'light': '#C5C5C5',
-            'warning': '#FF6B6B',
-            'safe': '#4ECDC4'
+            'primary': '#2E86AB',      # Bleu professionnel
+            'secondary': '#A23B72',    # Violet
+            'accent': '#F18F01',       # Orange
+            'dark': '#2D3047',         # Noir bleuté
+            'light': '#C5C5C5',        # Gris clair
+            'warning': '#FF6B6B',      # Rouge d'avertissement
+            'safe': '#4ECDC4',         # Vert turquoise
+            'neutral': '#7B8B8B'       # Gris neutre
         }
     
-    def data_standardisation(self, data: pd.DataFrame, 
-                            numerical_features: List[str]) -> pd.DataFrame:
+    # ============================================================================
+    # MÉTHODES INTERNES
+    # ============================================================================
+    
+    def _identify_feature_types(self, data: pd.DataFrame, features: List[str]) -> None:
         """
-        Standardise les caractéristiques numériques.
+        Identifie automatiquement les types de variables (catégorielles vs numériques).
         
         Paramètres
         ----------
         data : pd.DataFrame
             DataFrame contenant les données
-        numerical_features : List[str]
-            Liste des caractéristiques numériques à standardiser
-            
-        Retourne
-        -------
-        pd.DataFrame
-            DataFrame avec les caractéristiques standardisées
+        features : List[str]
+            Liste des caractéristiques à analyser
         """
-        if not numerical_features:
-            return data
+        self.cat_features = []
+        self.num_features = []
         
-        data_standardized = data.copy()
-        data_standardized[numerical_features] = self.scaler.fit_transform(
-            data[numerical_features]
-        )
-        return data_standardized
+        for feature in features:
+            # Critères pour identifier une variable catégorielle
+            is_categorical = (
+                data[feature].dtype == 'object' or 
+                data[feature].dtype.name == 'category' or
+                data[feature].nunique() < 10 or
+                (data[feature].dtype == 'int64' and data[feature].nunique() < 10)
+            )
+            
+            if is_categorical:
+                self.cat_features.append(feature)
+            elif data[feature].dtype in ['int64', 'float64']:
+                self.num_features.append(feature)
     
-    def heatmap_matrix(self, data: pd.DataFrame, 
-                       features: List[str], 
-                       target: str,
-                       figsize: tuple = (10, 8),
-                       annot: bool = True,
-                       ax: Optional[plt.Axes] = None) -> plt.Figure:
+    def _safe_correlation(self, data: pd.DataFrame, var1: str, var2: str) -> float:
         """
-        Génère une heatmap matricielle de corrélations.
+        Calcule la corrélation de manière robuste en gérant les NaN.
+        """
+        clean_data = data[[var1, var2]].dropna()
+        if len(clean_data) < 2:
+            return 0.0
+        return clean_data.corr().iloc[0, 1]
+    
+    # ============================================================================
+    # ANALYSE EXPLORATOIRE VISUELLE
+    # ============================================================================
+    
+    def boxplots_categoriels(self, data: pd.DataFrame,
+                            features: List[str],
+                            target: str,
+                            figsize: tuple = (15, 10),
+                            n_cols: int = 3,
+                            max_categories: int = 20) -> plt.Figure:
+        """
+        Génère des boxplots de la variable cible par catégorie avec sous-figures.
         
         Paramètres
         ----------
         data : pd.DataFrame
             Données d'entrée
         features : List[str]
-            Liste des caractéristiques
+            Liste des caractéristiques à analyser
         target : str
-            Variable cible
-        figsize : tuple
-            Dimensions de la figure
-        annot : bool
-            Si True, affiche les valeurs dans les cellules
-        ax : plt.Axes, optional
-            Axe matplotlib sur lequel dessiner
+            Variable cible continue
+        figsize : tuple, optional
+            Dimensions de la figure, par défaut (15, 10)
+        n_cols : int, optional
+            Nombre de colonnes pour l'agencement des sous-figures, par défaut 3
+        max_categories : int, optional
+            Nombre maximum de catégories à afficher par variable, par défaut 20
             
         Retourne
         -------
         plt.Figure
-            Figure matplotlib
+            Figure matplotlib avec les boxplots
         """
-        # Préparation des données
-        data_processed = data.copy()
+        # Identification des variables catégorielles
+        self._identify_feature_types(data, features)
+        cat_features_to_plot = self.cat_features
         
-        # Sélection et calcul des corrélations
-        numerical_features = [f for f in features if data[f].dtype in ['int64', 'float64']]
-        selected_features = numerical_features + [target]
-        corr_matrix = data_processed[selected_features].corr()
-        
-        # Création de la figure
-        if ax is None:
+        if not cat_features_to_plot:
+            warnings.warn("Aucune variable catégorielle détectée pour les boxplots.")
             fig, ax = plt.subplots(figsize=figsize)
+            ax.text(0.5, 0.5, "Aucune variable catégorielle detectee",
+                   ha='center', va='center', fontsize=12)
+            return fig
+        
+        n_features = len(cat_features_to_plot)
+        n_rows = int(np.ceil(n_features / n_cols))
+        
+        fig, axes = plt.subplots(n_rows, n_cols, figsize=figsize)
+        
+        # Convertir axes en liste pour manipulation facile
+        if n_features > 1:
+            axes = axes.flatten()
+        elif n_rows == 1 and n_cols == 1:
+            axes = [axes]
         else:
-            fig = ax.figure
+            axes = axes.ravel()
         
-        # Masque pour le triangle supérieur
-        mask = np.triu(np.ones_like(corr_matrix, dtype=bool))
+        for idx, feature in enumerate(cat_features_to_plot):
+            if idx >= len(axes):
+                break
+                
+            ax = axes[idx]
+            
+            # Filtrer les données sans NaN pour la catégorie et la target
+            plot_data = data[[feature, target]].dropna()
+            
+            if plot_data.empty or len(plot_data) < 5:
+                ax.text(0.5, 0.5, "Donnees insuffisantes",
+                       ha='center', va='center', fontsize=10)
+                ax.set_title(f'{feature} (n/a)', fontsize=11)
+                continue
+            
+            # Calculer les médianes et créer un ordre unique
+            try:
+                median_series = plot_data.groupby(feature)[target].median()
+                
+                # Si trop de catégories, on garde les principales
+                if len(median_series) > max_categories:
+                    # Garder les catégories les plus fréquentes
+                    counts = plot_data[feature].value_counts()
+                    top_categories = counts.nlargest(max_categories).index.tolist()
+                    plot_data = plot_data[plot_data[feature].isin(top_categories)]
+                    median_series = plot_data.groupby(feature)[target].median()
+                    
+                # Créer un DataFrame avec médiane et catégorie
+                median_df = median_series.reset_index()
+                median_df.columns = ['categorie', 'mediane']
+                
+                # Trier par médiane, puis par catégorie pour un ordre déterministe
+                median_df = median_df.sort_values(['mediane', 'categorie'], ascending=False)
+                order = median_df['categorie'].tolist()
+                
+                # Boxplot
+                boxplot = sns.boxplot(x=feature, y=target, data=plot_data,
+                                     order=order,
+                                     ax=ax,
+                                     palette='Set2',
+                                     showmeans=True,
+                                     meanprops={"marker": "D", 
+                                               "markerfacecolor": "white", 
+                                               "markeredgecolor": self.colors['warning'],
+                                               "markersize": 5})
+                
+                # Ajout des moyennes si nombre raisonnable de catégories
+                if len(order) <= 15:
+                    means = plot_data.groupby(feature)[target].mean()
+                    for i, cat in enumerate(order):
+                        if cat in means.index:
+                            mean_val = means[cat]
+                            # Positionner le texte au-dessus de la boîte
+                            ax.text(i, mean_val, f'{mean_val:.1f}', 
+                                   ha='center', va='bottom', fontsize=8, 
+                                   color=self.colors['dark'])
+                
+                # Personnalisation
+                ax.set_title(f'{feature}\n({len(order)} categories)', fontsize=11, pad=10)
+                ax.set_xlabel('')
+                ax.set_ylabel(target if idx % n_cols == 0 else '')
+                
+                # Ajuster la rotation selon le nombre de catégories
+                rotation = 45 if len(order) > 5 else (90 if len(order) > 10 else 0)
+                ax.tick_params(axis='x', rotation=rotation, labelsize=9)
+                
+                # Grille subtile
+                ax.grid(True, alpha=0.2, axis='y', linestyle='--')
+                
+            except Exception as e:
+                ax.text(0.5, 0.5, f"Erreur: {str(e)[:30]}",
+                       ha='center', va='center', fontsize=9)
+                ax.set_title(f'{feature} (erreur)', fontsize=11)
+                continue
         
-        # Heatmap
-        sns.heatmap(corr_matrix,
-                   mask=mask,
-                   annot=annot,
-                   fmt='.2f',
-                   cmap='RdBu_r',
-                   center=0,
-                   square=True,
-                   linewidths=0.5,
-                   cbar_kws={"shrink": 0.8},
-                   ax=ax)
+        # Masquer les axes inutilisés
+        for idx in range(len(cat_features_to_plot), len(axes)):
+            axes[idx].set_visible(False)
         
-        # Personnalisation
-        ax.set_title('Matrice de Corrélation', 
-                    fontsize=16, 
-                    fontweight='bold',
-                    pad=20)
-        ax.tick_params(axis='both', which='major', labelsize=10)
-        
-        # Rotation des étiquettes
-        plt.setp(ax.get_xticklabels(), rotation=45, ha='right')
-        plt.setp(ax.get_yticklabels(), rotation=0)
-        
-        if ax is None:
-            plt.tight_layout()
+        plt.suptitle('Distribution de la Variable Cible par Categorie',
+                    fontsize=16, fontweight='bold', y=1.02)
+        plt.tight_layout()
         return fig
     
     def paires_plot(self, data: pd.DataFrame,
@@ -251,13 +345,22 @@ class PipelineRegression:
         plt.tight_layout()
         return fig
     
-    def vif_plots(self, data: pd.DataFrame,
-                 features: List[str],
-                 target: str = None,
-                 figsize: tuple = (12, 6),
-                 ax: Optional[plt.Axes] = None) -> plt.Figure:
+    # ============================================================================
+    # ANALYSE D'ASSOCIATION
+    # ============================================================================
+    
+    def mixed_association_heatmap(self, data: pd.DataFrame,
+                                 features: List[str],
+                                 target: Optional[str] = None,
+                                 figsize: tuple = (12, 10)) -> plt.Figure:
         """
-        Calcule et visualise les VIF (Variance Inflation Factor) des variables.
+        Heatmap d'association hétérogène (mélange de variables continues et catégorielles).
+        
+        Utilise :
+        - Pearson pour continue vs continue
+        - Corrélation bisériale ponctuelle pour continue vs binaire
+        - Rapport de corrélation (eta) pour continue vs catégorielle (>2 modalités)
+        - V de Cramér pour catégorielle vs catégorielle
         
         Paramètres
         ----------
@@ -266,110 +369,164 @@ class PipelineRegression:
         features : List[str]
             Liste des caractéristiques
         target : str, optional
-            Variable cible (non utilisée dans le VIF mais pour la cohérence)
-        figsize : tuple
-            Dimensions de la figure
-        ax : plt.Axes, optional
-            Axe matplotlib sur lequel dessiner
+            Variable cible (si None, matrice symétrique)
+        figsize : tuple, optional
+            Dimensions de la figure, par défaut (12, 10)
             
         Retourne
         -------
         plt.Figure
             Figure matplotlib
         """
-        # Préparation des données
-        data_processed = data[features].copy()
+        # Identifier les types de variables
+        self._identify_feature_types(data, features)
         
-        # Vérifier que toutes les variables sont numériques
-        non_numeric = [f for f in features if data_processed[f].dtype not in ['int64', 'float64']]
-        if non_numeric:
-            warnings.warn(f"Les variables suivantes ne sont pas numériques et seront exclues: {non_numeric}")
-            features = [f for f in features if f not in non_numeric]
-            data_processed = data_processed[features]
+        all_vars = features.copy()
+        if target and target not in all_vars:
+            all_vars.append(target)
         
-        # Ajouter une constante pour le calcul du VIF
-        data_processed = pd.DataFrame(data_processed).assign(const=1)
+        # Créer une matrice de similarité
+        n_vars = len(all_vars)
+        assoc_matrix = pd.DataFrame(np.zeros((n_vars, n_vars)),
+                                   index=all_vars,
+                                   columns=all_vars)
         
-        # Calculer le VIF pour chaque variable
-        vif_data = pd.DataFrame()
-        vif_data["Variable"] = features
-        vif_data["VIF"] = [variance_inflation_factor(data_processed.values, i) 
-                          for i in range(len(features))]
+        # Remplir la diagonale avec 1
+        np.fill_diagonal(assoc_matrix.values, 1.0)
         
-        # Tri par VIF décroissant
-        vif_data = vif_data.sort_values("VIF", ascending=False).reset_index(drop=True)
+        # Remplir la matrice d'association
+        for i, var1 in enumerate(all_vars):
+            for j, var2 in enumerate(all_vars):
+                if i >= j:  # Matrice symétrique, on calcule seulement la moitié
+                    continue
+                
+                # Déterminer les types
+                type_var1 = 'cat' if var1 in self.cat_features else 'num'
+                type_var2 = 'cat' if var2 in self.cat_features else 'num'
+                
+                # Sélectionner les données valides
+                valid_data = data[[var1, var2]].dropna()
+                if len(valid_data) < 2:
+                    continue
+                
+                # Selon la combinaison de types
+                if type_var1 == 'num' and type_var2 == 'num':
+                    # Pearson
+                    corr = valid_data[var1].corr(valid_data[var2])
+                    assoc_value = abs(corr) if not np.isnan(corr) else 0
+                    
+                elif type_var1 == 'cat' and type_var2 == 'cat':
+                    # V de Cramér
+                    contingency_table = pd.crosstab(valid_data[var1], valid_data[var2])
+                    try:
+                        chi2, p, dof, expected = chi2_contingency(contingency_table)
+                        n_obs = contingency_table.sum().sum()
+                        cramers_v = np.sqrt(chi2 / (n_obs * (min(contingency_table.shape) - 1)))
+                        assoc_value = cramers_v if not np.isnan(cramers_v) else 0
+                    except:
+                        assoc_value = 0
+                    
+                else:
+                    # Mixte: déterminer quelle variable est catégorielle
+                    cat_var = var1 if type_var1 == 'cat' else var2
+                    num_var = var2 if type_var1 == 'cat' else var1
+                    
+                    n_categories = valid_data[cat_var].nunique()
+                    
+                    if n_categories == 2:
+                        # Corrélation bisériale ponctuelle
+                        categories = valid_data[cat_var].unique()
+                        if len(categories) == 2:
+                            cat_encoded = valid_data[cat_var].map({categories[0]: 0, categories[1]: 1})
+                            try:
+                                corr, p_value = pointbiserialr(cat_encoded, valid_data[num_var])
+                                assoc_value = abs(corr) if not np.isnan(corr) else 0
+                            except:
+                                assoc_value = 0
+                        else:
+                            assoc_value = 0
+                    else:
+                        # Rapport de corrélation (eta carré)
+                        groups = [valid_data[valid_data[cat_var] == cat][num_var] 
+                                 for cat in valid_data[cat_var].unique()]
+                        
+                        # Calculer la variance expliquée
+                        overall_mean = valid_data[num_var].mean()
+                        ss_between = sum([len(g) * (g.mean() - overall_mean)**2 for g in groups])
+                        ss_total = sum((valid_data[num_var] - overall_mean)**2)
+                        
+                        eta_squared = ss_between / ss_total if ss_total > 0 else 0
+                        assoc_value = np.sqrt(eta_squared)
+                
+                # Remplir la matrice (symétrique)
+                assoc_matrix.iloc[i, j] = assoc_value
+                assoc_matrix.iloc[j, i] = assoc_value
         
-        # Création de la figure
-        if ax is None:
-            fig, ax = plt.subplots(figsize=figsize)
+        # Création de la heatmap
+        fig, ax = plt.subplots(figsize=figsize)
+        
+        # Masque pour le triangle supérieur si pas de cible spécifique
+        if not target:
+            mask = np.triu(np.ones_like(assoc_matrix, dtype=bool))
         else:
-            fig = ax.figure
+            mask = None
         
-        # Création du graphique à barres
-        bars = ax.bar(vif_data["Variable"], vif_data["VIF"], 
-                      width=0.25,  
-                      color=[self.colors['warning'] if v > 10 else self.colors['primary'] 
-                             for v in vif_data["VIF"]])
-        
-        # Ligne de seuil VIF = 10
-        ax.axhline(y=10, color=self.colors['warning'], linestyle='--', 
-                  linewidth=2, label='VIF = 10')
-        
-        # Ligne de seuil VIF = 5
-        ax.axhline(y=5, color=self.colors['accent'], linestyle=':', 
-                  linewidth=1.5, label='VIF = 5')
+        # Heatmap avec annotations
+        sns.heatmap(assoc_matrix,
+                   mask=mask,
+                   annot=True,
+                   fmt='.2f',
+                   cmap='YlOrRd',
+                   vmin=0,
+                   vmax=1,
+                   square=True,
+                   linewidths=0.5,
+                   cbar_kws={"shrink": 0.8, "label": "Intensite d'association"},
+                   ax=ax)
         
         # Personnalisation
-        ax.set_ylabel('VIF', fontsize=12, fontweight='bold')
-        ax.set_title('Diagnostic de Multicolinéarité', 
-                    fontsize=16, fontweight='bold', pad=20)
+        if target:
+            title = f"Matrice d'Association Heterogene (avec cible : {target})"
+        else:
+            title = "Matrice d'Association Heterogene"
         
-        # Rotation des étiquettes des variables
-        plt.setp(ax.get_xticklabels(), rotation=45, ha='right')
+        ax.set_title(title, fontsize=16, fontweight='bold', pad=20)
         
-        # Ajouter les valeurs sur les barres
-        for bar in bars:
-            height = bar.get_height()
-            ax.text(bar.get_x() + bar.get_width()/2., height + 0.1,
-                   f'{height:.1f}', ha='center', va='bottom', fontsize=9)
+        # Ajouter des indications sur les types de variables
+        cat_vars = [v for v in all_vars if v in self.cat_features]
+        num_vars = [v for v in all_vars if v not in self.cat_features]
         
-        # Légende
-        ax.legend(loc='upper right', fontsize=10)
+        # Légende pour les types de variables
+        legend_text = []
+        if cat_vars:
+            legend_text.append("Variables categorielles :")
+            legend_text.extend([f"  - {var}" for var in cat_vars])
+        if num_vars:
+            legend_text.append("\nVariables numeriques :")
+            legend_text.extend([f"  - {var}" for var in num_vars])
         
-        # Grille
-        ax.grid(True, alpha=0.3, axis='y')
-        
-        # Ajustement des limites
-        max_vif = max(vif_data["VIF"])
-        ax.set_ylim(0, max(max_vif * 1.1, 12))
-        
-        # Informations textuelles
-        high_vif = vif_data[vif_data["VIF"] > 10]
-        moderate_vif = vif_data[(vif_data["VIF"] > 5) & (vif_data["VIF"] <= 10)]
-        
-        info_text = []
-        if not high_vif.empty:
-            info_text.append(f"Multicolinéarité élevée (VIF > 10): {len(high_vif)} variable(s)")
-        if not moderate_vif.empty:
-            info_text.append(f"Multicolinéarité modérée (5 < VIF ≤ 10): {len(moderate_vif)} variable(s)")
-        
-        if info_text:
-            info_str = "\n".join(info_text)
-            ax.text(0.02, 0.98, info_str, transform=ax.transAxes,
+        if legend_text:
+            ax.text(1.02, 0.95, '\n'.join(legend_text), transform=ax.transAxes,
                    fontsize=9, verticalalignment='top',
-                   bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.5))
+                   bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.3))
         
-        if ax is None:
-            plt.tight_layout()
+        plt.xticks(rotation=45, ha='right')
+        plt.yticks(rotation=0)
         
+        plt.tight_layout()
         return fig
     
-    def headmap_vif(self, data: pd.DataFrame,
-                               features: List[str],
-                               target: str,
-                               figsize: tuple = (24, 8)) -> plt.Figure:
+    # ============================================================================
+    # MÉTHODES DE MODÉLISATION
+    # ============================================================================
+    
+    def fit(self, data: pd.DataFrame,
+            features: List[str],
+            target: str,
+            include_robust: bool = False,
+            standardisation: bool = False) -> None:
         """
-        Crée un dashboard complet avec 3 visualisations principales.
+        Ajuste un modèle de régression linéaire.
         
         Paramètres
         ----------
@@ -379,28 +536,50 @@ class PipelineRegression:
             Liste des caractéristiques
         target : str
             Variable cible
-        figsize : tuple
-            Dimensions de la figure
-            
-        Retourne
-        -------
-        plt.Figure
-            Figure matplotlib avec les 3 graphiques
+        include_robust : bool, optional
+            Si True, utilise les erreurs standards robustes, par défaut False
+        standardisation : bool, optional
+            Si True, standardise les caractéristiques numériques, par défaut False
         """
-        fig, axes = plt.subplots(1, 2, figsize=figsize)
+        self.standardisation = standardisation
+        self.feature_names = features
+        self.target_name = target
         
-        # 1. Heatmap
-        self.heatmap_matrix(data=data, features=features, target=target, ax=axes[0])
-        axes[0].set_title('Matrice de Corrélation', fontsize=14, fontweight='bold')
+        # Identifier les types
+        self._identify_feature_types(data, features)
         
-        # 2. VIF plots
-        self.vif_plots(data=data, features=features, target=target, ax=axes[1])
-        axes[1].set_title('Diagnostic de Multicolinéarité (VIF)', fontsize=14, fontweight='bold')
+        # Préparation des données
+        if standardisation:
+            # Standardiser uniquement les variables numériques
+            data_processed = data.copy()
+            if self.num_features:
+                data_processed[self.num_features] = self.scaler.fit_transform(
+                    data[self.num_features]
+                )
+        else:
+            data_processed = data.copy()
         
+        # Construction de la formule
+        formula = f"{target} ~ {' + '.join(features)}"
         
-        # Ajustement de l'espacement
-        plt.tight_layout()
-        return fig
+        # Ajustement du modèle
+        try:
+            if include_robust:
+                self.model = smf.ols(formula=formula, data=data_processed).fit(cov_type="HC0")
+            else:
+                self.model = smf.ols(formula=formula, data=data_processed).fit()
+            
+            print("=" * 80)
+            print("RESULTATS DE LA REGRESSION LINEAIRE")
+            print("=" * 80)
+            print(self.model.summary())
+            
+        except Exception as e:
+            print(f"Erreur lors de l'ajustement du modele : {str(e)}")
+            self.model = None
+    
+
+
 
     def fit_stepwise(self, data: pd.DataFrame,
                  features: List[str],
@@ -589,50 +768,6 @@ class PipelineRegression:
 
 
 
-    def fit(self, data: pd.DataFrame,
-            features: List[str],
-            target: str,
-            include_robust: bool = False,
-            standardisation: bool = False) -> None:
-        """
-        Ajuste un modèle de régression linéaire.
-        
-        Paramètres
-        ----------
-        data : pd.DataFrame
-            Données d'entrée
-        features : List[str]
-            Liste des caractéristiques
-        target : str
-            Variable cible
-        include_robust : bool
-            Si True, utilise les erreurs standards robustes
-        standardisation : bool
-            Si True, standardise les caractéristiques
-        """
-        self.standardisation = standardisation
-        self.feature_names = features
-        self.target_name = target
-        
-        # Préparation des données
-        if standardisation:
-            numerical_features = [f for f in features if data[f].dtype in ['int64', 'float64']]
-            data_processed = self.data_standardisation(data, numerical_features)
-        else:
-            data_processed = data.copy()
-        
-        # Construction de la formule Patsy
-        formula = f"{target} ~ {' + '.join(features)}"
-
-        # Ajustement du modèle
-        if include_robust:
-            self.model = smf.ols(formula=formula, data=data_processed).fit(cov_type="HC0")
-        else:
-            self.model = smf.ols(formula=formula, data=data_processed).fit()
-    
-        # Affichage des résultats
-        print(self.model.summary())
-    
     def predict(self, X_new: Union[pd.DataFrame, np.ndarray]) -> np.ndarray:
         """
         Prédit les valeurs pour de nouvelles observations.
@@ -646,9 +781,14 @@ class PipelineRegression:
         -------
         np.ndarray
             Prédictions
+            
+        Lève
+        -----
+        ValueError
+            Si le modèle n'a pas été ajusté
         """
         if self.model is None:
-            raise ValueError("Le modèle n'a pas été ajusté. Utilisez fit() d'abord.")
+            raise ValueError("Le modele n'a pas ete ajuste. Utilisez fit() d'abord.")
         
         # Préparation des données
         if isinstance(X_new, pd.DataFrame):
@@ -657,94 +797,124 @@ class PipelineRegression:
             X_new = pd.DataFrame(X_new, columns=self.feature_names)
         
         # Standardisation si nécessaire
-        if self.standardisation:
-            numerical_features = [f for f in self.feature_names 
-                                if X_new[f].dtype in ['int64', 'float64']]
+        if self.standardisation and self.num_features:
+            numerical_features = [f for f in self.feature_names if f in self.num_features]
             if numerical_features:
                 X_new[numerical_features] = self.scaler.transform(X_new[numerical_features])
         
         # Prédiction
         return self.model.predict(X_new)
     
-    def diagnostic_plots(self, data: pd.DataFrame,
-                        figsize: tuple = (15, 10)) -> plt.Figure:
+    # ============================================================================
+    # MÉTHODES UTILITAIRES
+    # ============================================================================
+    
+    def summary_statistics(self, data: pd.DataFrame,
+                          features: List[str],
+                          target: str) -> pd.DataFrame:
         """
-        Crée des graphiques de diagnostic pour le modèle ajusté.
+        Génère un résumé statistique des variables.
         
         Paramètres
         ----------
         data : pd.DataFrame
             Données d'entrée
-        figsize : tuple
-            Dimensions de la figure
+        features : List[str]
+            Liste des caractéristiques
+        target : str
+            Variable cible
             
         Retourne
         -------
-        plt.Figure
-            Figure matplotlib avec les diagnostics
+        pd.DataFrame
+            Résumé statistique
         """
-        if self.model is None:
-            raise ValueError("Le modèle n'a pas été ajusté. Utilisez fit() d'abord.")
+        self._identify_feature_types(data, features)
         
-        # Prédictions et résidus
-        y_pred = self.predict(data[self.feature_names])
-        residuals = data[self.target_name] - y_pred
-        standardized_residuals = residuals / np.std(residuals)
+        summary_list = []
         
-        # Création de la figure
-        fig = plt.figure(figsize=figsize)
+        # Variables numériques
+        for var in self.num_features:
+            var_data = data[var].dropna()
+            summary_list.append({
+                'Variable': var,
+                'Type': 'Numerique',
+                'N': len(var_data),
+                'Moyenne': var_data.mean(),
+                'Ecart-type': var_data.std(),
+                'Min': var_data.min(),
+                'Q1': var_data.quantile(0.25),
+                'Mediane': var_data.median(),
+                'Q3': var_data.quantile(0.75),
+                'Max': var_data.max(),
+                'NA': data[var].isna().sum(),
+                '% NA': data[var].isna().mean() * 100
+            })
         
-        # Grille 2x2 pour les diagnostics
-        gs = gridspec.GridSpec(2, 2)
+        # Variables catégorielles
+        for var in self.cat_features:
+            var_data = data[var].dropna()
+            unique_vals = var_data.nunique()
+            top_cat = var_data.value_counts().index[0] if not var_data.empty else None
+            top_freq = var_data.value_counts().iloc[0] if not var_data.empty else 0
+            
+            summary_list.append({
+                'Variable': var,
+                'Type': 'Categorielle',
+                'N': len(var_data),
+                'Modalites': unique_vals,
+                'Modalite_freq': top_cat,
+                'Freq_max': top_freq,
+                '% Freq_max': (top_freq / len(var_data) * 100) if len(var_data) > 0 else 0,
+                'Min': np.nan,
+                'Q1': np.nan,
+                'Mediane': np.nan,
+                'Q3': np.nan,
+                'Max': np.nan,
+                'NA': data[var].isna().sum(),
+                '% NA': data[var].isna().mean() * 100
+            })
         
-        # 1. Résidus vs Prédictions
-        ax1 = fig.add_subplot(gs[0, 0])
-        ax1.scatter(y_pred, residuals, alpha=0.6, color=self.colors['primary'])
-        ax1.axhline(y=0, color='red', linestyle='--', linewidth=1)
-        ax1.set_xlabel('Prédictions', fontsize=12)
-        ax1.set_ylabel('Résidus', fontsize=12)
-        ax1.set_title('Résidus vs Prédictions', fontsize=14, fontweight='bold')
-        ax1.grid(True, alpha=0.3)
+        summary_df = pd.DataFrame(summary_list)
         
-        # 2. QQ-plot des résidus
-        ax2 = fig.add_subplot(gs[0, 1])
-        from scipy import stats
-        stats.probplot(residuals, dist="norm", plot=ax2)
-        ax2.set_title('QQ-plot des Résidus', fontsize=14, fontweight='bold')
-        ax2.grid(True, alpha=0.3)
+        print("=" * 80)
+        print("RESUME STATISTIQUE DES VARIABLES")
+        print("=" * 80)
+        print(f"\nVariables numeriques : {len(self.num_features)}")
+        print(f"Variables categorielles : {len(self.cat_features)}")
+        print(f"Variable cible : {target}")
+        print("\n" + "-" * 80)
+        print(summary_df.to_string(index=False))
+        print("-" * 80)
         
-        # 3. Histogramme des résidus
-        ax3 = fig.add_subplot(gs[1, 0])
-        ax3.hist(residuals, bins=30, alpha=0.7, color=self.colors['primary'],
-                edgecolor='white', linewidth=0.5)
-        ax3.axvline(0, color='red', linestyle='--', linewidth=2)
-        ax3.set_xlabel('Résidus', fontsize=12)
-        ax3.set_ylabel('Fréquence', fontsize=12)
-        ax3.set_title('Distribution des Résidus', fontsize=14, fontweight='bold')
-        ax3.grid(True, alpha=0.3)
+        return summary_df
+    
+    def export_results(self, output_dir: str = "./results") -> None:
+        """
+        Exporte les résultats et graphiques.
         
-        # 4. Résidus standardisés
-        ax4 = fig.add_subplot(gs[1, 1])
-        ax4.scatter(range(len(standardized_residuals)), standardized_residuals,
-                   alpha=0.6, color=self.colors['primary'])
-        ax4.axhline(y=0, color='red', linestyle='-', linewidth=1)
-        ax4.axhline(y=2, color=self.colors['warning'], linestyle='--', linewidth=1)
-        ax4.axhline(y=-2, color=self.colors['warning'], linestyle='--', linewidth=1)
-        ax4.set_xlabel('Index des Observations', fontsize=12)
-        ax4.set_ylabel('Résidus Standardisés', fontsize=12)
-        ax4.set_title('Résidus Standardisés', fontsize=14, fontweight='bold')
-        ax4.grid(True, alpha=0.3)
+        Paramètres
+        ----------
+        output_dir : str, optional
+            Répertoire de sortie, par défaut "./results"
+        """
+        import os
         
-        # Informations statistiques
-        info_text = (f"R²: {self.model.rsquared:.3f}\n"
-                    f"R² ajusté: {self.model.rsquared_adj:.3f}\n"
-                    f"MSE: {np.mean(residuals**2):.3f}\n"
-                    f"Test de normalité (Shapiro-Wilk):\n"
-                    f"  p-value: {stats.shapiro(residuals)[1]:.4f}")
+        # Créer le répertoire si nécessaire
+        os.makedirs(output_dir, exist_ok=True)
         
-        fig.text(0.02, 0.98, info_text, transform=fig.transFigure,
-                fontsize=10, verticalalignment='top',
-                bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.5))
+        print(f"Export des resultats dans : {output_dir}")
         
-        plt.tight_layout()
-        return fig
+        # Exporter les paramètres du modèle si disponible
+        if self.model is not None:
+            params_df = pd.DataFrame({
+                'Variable': self.model.params.index,
+                'Coefficient': self.model.params.values,
+                'Std_Error': self.model.bse.values,
+                't_value': self.model.tvalues.values,
+                'p_value': self.model.pvalues.values
+            })
+            params_df.to_csv(f"{output_dir}/coefficients.csv", index=False)
+            print(f"  - Coefficients exportes : {output_dir}/coefficients.csv")
+        
+        print("Export termine.")
