@@ -12,6 +12,7 @@ from scipy import stats
 import statsmodels.api as sm
 from scipy.stats import chi2_contingency, pointbiserialr
 import itertools
+from IPython.display import display, HTML
 
 class PipelineRegression:
     """
@@ -466,10 +467,8 @@ class PipelineRegression:
         fig, ax = plt.subplots(figsize=figsize)
         
         # Masque pour le triangle supérieur si pas de cible spécifique
-        if not target:
-            mask = np.triu(np.ones_like(assoc_matrix, dtype=bool))
-        else:
-            mask = None
+
+        mask = np.triu(np.ones_like(assoc_matrix, dtype=bool))
         
         # Heatmap avec annotations
         sns.heatmap(assoc_matrix,
@@ -485,30 +484,9 @@ class PipelineRegression:
                    ax=ax)
         
         # Personnalisation
-        if target:
-            title = f"Matrice d'Association Heterogene (avec cible : {target})"
-        else:
-            title = "Matrice d'Association Heterogene"
+        title = "Matrice d'Association Heterogene"
         
         ax.set_title(title, fontsize=16, fontweight='bold', pad=20)
-        
-        # Ajouter des indications sur les types de variables
-        cat_vars = [v for v in all_vars if v in self.cat_features]
-        num_vars = [v for v in all_vars if v not in self.cat_features]
-        
-        # Légende pour les types de variables
-        legend_text = []
-        if cat_vars:
-            legend_text.append("Variables categorielles :")
-            legend_text.extend([f"  - {var}" for var in cat_vars])
-        if num_vars:
-            legend_text.append("\nVariables numeriques :")
-            legend_text.extend([f"  - {var}" for var in num_vars])
-        
-        if legend_text:
-            ax.text(1.02, 0.95, '\n'.join(legend_text), transform=ax.transAxes,
-                   fontsize=9, verticalalignment='top',
-                   bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.3))
         
         plt.xticks(rotation=45, ha='right')
         plt.yticks(rotation=0)
@@ -524,7 +502,9 @@ class PipelineRegression:
             features: List[str],
             target: str,
             include_robust: bool = False,
-            standardisation: bool = False) -> None:
+            standardisation: bool = False,
+            first: Optional[bool] = None,
+            rayon: Optional[int] = None) -> None:
         """
         Ajuste un modèle de régression linéaire.
         
@@ -563,210 +543,33 @@ class PipelineRegression:
         formula = f"{target} ~ {' + '.join(features)}"
         
         # Ajustement du modèle
+        if first is not None:
+            if first:
+                text = "Tableau 1 : Impact de la présence/absence de bibliothèques"
+            else:
+                text = "Tableau 2 : Impact du nombre de bibliothèques"
+        else:
+            text = "Tableau : Résultats de la régression linéaire"
+
+        if rayon is not None:
+            text += f" dans un rayon de {rayon} mètres"
+                
         try:
             if include_robust:
                 self.model = smf.ols(formula=formula, data=data_processed).fit(cov_type="HC0")
             else:
                 self.model = smf.ols(formula=formula, data=data_processed).fit()
-            
-            print("=" * 80)
-            print("RESULTATS DE LA REGRESSION LINEAIRE")
-            print("=" * 80)
-            print(self.model.summary())
+            html_summary = self.model.summary().as_html()
+            display(HTML(f"""
+                <h3 style="color:darkgreen; font-weight:bold;">{text}</h3>
+                <div style="color:darkblue;font-weight:bold; font-family:Arial;">
+                    {html_summary}
+                </div>
+            """))
             
         except Exception as e:
             print(f"Erreur lors de l'ajustement du modele : {str(e)}")
             self.model = None
-    
-
-
-
-    def fit_stepwise(self, data: pd.DataFrame,
-                 features: List[str],
-                 target: str,
-                 include_robust: bool = False,
-                 standardisation: bool = False,
-                 forward: bool = True,
-                 verbose: bool = True,
-                 best : bool = False) -> None:
-        """
-        Implémente une sélection stepwise des variables (forward ou backward) 
-        basée uniquement sur l'AIC avec affichage des tableaux statsmodels complets.
-        
-        Paramètres
-        ----------
-        data : pd.DataFrame
-            Données d'entrée
-        features : List[str]
-            Liste des caractéristiques initiales
-        target : str
-            Variable cible
-        include_robust : bool
-            Si True, utilise les erreurs standards robustes
-        standardisation : bool
-            Si True, standardise les caractéristiques
-        forward : bool
-            Si True, utilise forward selection, sinon backward elimination
-        verbose : bool
-            Si True, affiche le tableau model.summary() uniquement pour le modèle retenu à chaque étape
-        best : bool
-            Si True, affiche uniquement le meilleur modèle final
-            
-        Retourne
-        -------
-        None
-            Stocke le meilleur modèle dans self.stepwise_best
-        """
-        self.standardisation = standardisation
-        self.feature_names = features
-        self.target_name = target
-        
-        # Préparation des données
-        if standardisation:
-            numerical_features = [f for f in features if data[f].dtype in ['int64', 'float64']]
-            data_processed = self.data_standardisation(data, numerical_features)
-        else:
-            data_processed = data.copy()
-        
-        if forward:
-            self._forward_selection_aic(data_processed, features, target, include_robust, verbose)
-            if best :
-                print("="*60)
-                print("MEILLEUR MODÈLE AVEC FORWARD SELECTION")
-                print("="*60)
-                print(self.stepwise_best.summary())
-        else:
-            self._backward_elimination_aic(data_processed, features, target, include_robust, verbose)
-            if best :
-                print("="*60)
-                print("MEILLEUR MODÈLE AVEC BACKWARD SELECTION")
-                print("="*60)
-                print(self.stepwise_best.summary())
-                
-
-    def _forward_selection_aic(self, data: pd.DataFrame,
-                            features: List[str],
-                            target: str,
-                            include_robust: bool,
-                            verbose: bool) -> None:
-        """
-        Implémente la sélection forward basée uniquement sur l'AIC.
-        Affiche uniquement le tableau du modèle retenu à chaque étape.
-        """
-        selected_features = []
-        remaining_features = features.copy()
-        iteration = 0
-        
-        while remaining_features:
-            iteration += 1
-            best_candidate = None
-            best_aic = float('inf')
-            best_model = None
-            
-            # Tester chaque variable candidate (sans afficher les tableaux)
-            for candidate in remaining_features:
-                test_features = selected_features + [candidate]
-                formula = f"{target} ~ {' + '.join(test_features)}"
-                
-                try:
-                    if include_robust:
-                        model = smf.ols(formula=formula, data=data).fit(cov_type="HC0")
-                    else:
-                        model = smf.ols(formula=formula, data=data).fit()
-                    
-                    # Mettre à jour la meilleure candidate basée sur AIC
-                    if model.aic < best_aic:
-                        best_aic = model.aic
-                        best_candidate = candidate
-                        best_model = model
-                        
-                except Exception as e:
-                    print(f"  - {candidate}: Erreur - {str(e)}")
-            
-            # Vérifier s'il y a une amélioration
-            if iteration == 1 or best_aic < self.stepwise_best.aic:
-                selected_features.append(best_candidate)
-                remaining_features.remove(best_candidate)
-                self.stepwise_best = best_model
-                
-                # Afficher UNIQUEMENT le tableau du modèle retenu (si verbose=True)
-                if verbose:
-                    print("\n")
-                    print(f"================ÉTAPE {iteration} - FORWARD SELECTION================= \n")
-                    print(self.stepwise_best.summary())
-            else:
-                break
-
-    def _backward_elimination_aic(self, data: pd.DataFrame,
-                                features: List[str],
-                                target: str,
-                                include_robust: bool,
-                                verbose: bool) -> None:
-        """
-        Implémente l'élimination backward basée uniquement sur l'AIC.
-        Affiche uniquement le tableau du modèle retenu à chaque étape.
-        """
-        current_features = features.copy()
-        iteration = 0
-        
-        # Modèle initial avec toutes les variables
-        formula = f"{target} ~ {' + '.join(current_features)}"
-        if include_robust:
-            current_model = smf.ols(formula=formula, data=data).fit(cov_type="HC0")
-        else:
-            current_model = smf.ols(formula=formula, data=data).fit()
-        
-        self.stepwise_best = current_model
-        
-        if verbose:
-            print(f"\n{'='*60}")
-            print(f"MODÈLE INITIAL")
-            print(f"{'='*60}")
-            print(self.stepwise_best.summary())
-        
-        while len(current_features) > 1:
-            iteration += 1
-            best_aic = float('inf')
-            best_features = None
-            best_model = None
-            removed_feature = None
-            
-            
-            # Tester chaque suppression possible (sans afficher les tableaux)
-            for feature_to_remove in current_features:
-                test_features = [f for f in current_features if f != feature_to_remove]
-                formula = f"{target} ~ {' + '.join(test_features)}"
-                
-                try:
-                    if include_robust:
-                        model = smf.ols(formula=formula, data=data).fit(cov_type="HC0")
-                    else:
-                        model = smf.ols(formula=formula, data=data).fit()
-                    
-                    # Trouver le meilleur modèle (AIC le plus bas)
-                    if model.aic < best_aic:
-                        best_aic = model.aic
-                        best_features = test_features
-                        best_model = model
-                        removed_feature = feature_to_remove
-                        
-                except Exception as e:
-                    print(f"  - Sans {feature_to_remove}: Erreur - {str(e)}")
-            
-            # Vérifier si la suppression améliore l'AIC
-            if best_aic < self.stepwise_best.aic:
-                current_features = best_features
-                self.stepwise_best = best_model
-                
-                # Afficher UNIQUEMENT le tableau du modèle retenu (si verbose=True)
-                if verbose:
-                    print("\n")
-                    print(f"================ÉTAPE {iteration} - BACKWARD SELECTION=================\n")
-                    print(self.stepwise_best.summary())
-            else:
-                break
-
-
 
     def predict(self, X_new: Union[pd.DataFrame, np.ndarray]) -> np.ndarray:
         """
@@ -888,33 +691,94 @@ class PipelineRegression:
         print("-" * 80)
         
         return summary_df
-    
-    def export_results(self, output_dir: str = "./results") -> None:
-        """
-        Exporte les résultats et graphiques.
-        
-        Paramètres
-        ----------
-        output_dir : str, optional
-            Répertoire de sortie, par défaut "./results"
-        """
-        import os
-        
-        # Créer le répertoire si nécessaire
-        os.makedirs(output_dir, exist_ok=True)
-        
-        print(f"Export des resultats dans : {output_dir}")
-        
-        # Exporter les paramètres du modèle si disponible
-        if self.model is not None:
-            params_df = pd.DataFrame({
-                'Variable': self.model.params.index,
-                'Coefficient': self.model.params.values,
-                'Std_Error': self.model.bse.values,
-                't_value': self.model.tvalues.values,
-                'p_value': self.model.pvalues.values
-            })
-            params_df.to_csv(f"{output_dir}/coefficients.csv", index=False)
-            print(f"  - Coefficients exportes : {output_dir}/coefficients.csv")
-        
-        print("Export termine.")
+    def plot_coefficients(self):
+        # Configuration pour un style professionnel
+        plt.style.use('seaborn-v0_8-whitegrid')
+        plt.rcParams['font.family'] = 'DejaVu Sans'
+        plt.rcParams['font.size'] = 10
+        plt.rcParams['axes.labelsize'] = 11
+        plt.rcParams['axes.titlesize'] = 12
+        plt.rcParams['xtick.labelsize'] = 10
+        plt.rcParams['ytick.labelsize'] = 10
+
+        # Données des coefficients
+        rayons = np.array([0.5, 1.0, 2.0, 5.0])  # en km
+
+        # Effet de présence (dummy)
+        coef_presence = np.array([0.9627, 1.2921, 1.2010, 1.3437])
+        std_presence = np.array([0.401, 0.386, 0.539, 0.696])
+        conf_presence = 1.96 * std_presence  # Intervalle de confiance 95%
+
+        # Effet de densité (nombre)
+        coef_densite = np.array([0.4104, 0.1297, 0.0415, 0.0154])
+        std_densite = np.array([0.193, 0.075, 0.035, 0.009])
+        conf_densite = 1.96 * std_densite
+
+        # Création de la figure avec deux sous-graphiques
+        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 6), sharex=True)
+
+        # Graphique 1 : Effet de présence (convexe)
+        ax1.errorbar(rayons, coef_presence, yerr=conf_presence, 
+                    fmt='o', color='#1f77b4', capsize=6, capthick=1.5, 
+                    linewidth=1.5, markersize=8, label='Estimation ponctuelle')
+
+        # Courbe de tendance polynomiale (degré 2 pour illustrer la convexité)
+        poly_coeff = np.polyfit(rayons, coef_presence, 2)
+        poly_fit = np.poly1d(poly_coeff)
+        rayons_smooth = np.linspace(0.3, 5.5, 100)
+        ax1.plot(rayons_smooth, poly_fit(rayons_smooth), '--', color='#1f77b4', 
+                alpha=0.7, linewidth=1.5, label='Tendance convexe')
+
+        ax1.set_xlabel('Rayon (km)', fontweight='medium')
+        ax1.set_ylabel('Effet sur le taux de mention\n(points de pourcentage)', fontweight='medium')
+        ax1.set_title('A. Effet de la présence d\'au moins une bibliothèque', 
+                    fontweight='bold', pad=15)
+        ax1.grid(True, alpha=0.4, linestyle='--')
+        ax1.legend(loc='best', framealpha=0.9)
+        ax1.set_xlim(0.2, 5.5)
+
+        # Annotations pour chaque point
+        for i, (x, y) in enumerate(zip(rayons, coef_presence)):
+            ax1.annotate(f'  {y:.3f}', xy=(x, y), xytext=(5, 0), 
+                        textcoords='offset points', ha='left', va='center',
+                        fontsize=9, color='#2c3e50')
+
+        # Graphique 2 : Effet de densité (décroissant)
+        ax2.errorbar(rayons, coef_densite, yerr=conf_densite,
+                    fmt='s', color='#d62728', capsize=6, capthick=1.5,
+                    linewidth=1.5, markersize=8, label='Estimation ponctuelle')
+
+        # Courbe de tendance exponentielle pour illustrer la décroissance
+        from scipy.optimize import curve_fit
+
+        def exp_decay(x, a, b, c):
+            return a * np.exp(-b * x) + c
+
+        popt, _ = curve_fit(exp_decay, rayons, coef_densite, p0=[0.4, 1, 0])
+        ax2.plot(rayons_smooth, exp_decay(rayons_smooth, *popt), '--', 
+                color='#d62728', alpha=0.7, linewidth=1.5, label='Décroissance exponentielle')
+
+        ax2.set_xlabel('Rayon (km)', fontweight='medium')
+        ax2.set_ylabel('Effet par bibliothèque supplémentaire\n(points de pourcentage)', 
+                    fontweight='medium')
+        ax2.set_title('B. Effet du nombre de bibliothèques', 
+                    fontweight='bold', pad=15)
+        ax2.grid(True, alpha=0.4, linestyle='--')
+        ax2.legend(loc='best', framealpha=0.9)
+        ax2.set_xlim(0.2, 5.5)
+
+        # Annotations pour chaque point
+        for i, (x, y) in enumerate(zip(rayons, coef_densite)):
+            ax2.annotate(f'  {y:.3f}', xy=(x, y), xytext=(5, 0),
+                        textcoords='offset points', ha='left', va='center',
+                        fontsize=9, color='#2c3e50')
+
+        # Ajout d'une note méthodologique en bas de la figure
+        fig.text(0.02, 0.02, 
+                'Note : Les barres d\'erreur représentent les intervalles de confiance à 95%.\n'
+                'Les courbes en pointillés illustrent les tendances qualitatives.',
+                fontsize=9, style='italic', alpha=0.7)
+
+        # Ajustement de l'espacement
+        plt.tight_layout(rect=[0, 0.05, 1, 0.98])
+        plt.show()
