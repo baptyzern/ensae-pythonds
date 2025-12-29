@@ -303,6 +303,5 @@ def filter_data_lycees(lycees_data):
         '94'  # Corse
         ]
     lycees_data = lycees_data[~lycees_data['code_region'].isin(regions_hors_hexagone)]
-    lycees_data = lycees_data.reset_index()
 
     return lycees_data

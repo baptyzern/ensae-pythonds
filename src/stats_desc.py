@@ -47,6 +47,7 @@ def map_croisee(biblio_dep, lycees_dep, zoom_start=12):
 
 
 def lycees_stat_desc_num(lycees_data):
+    
     lycees_stat_desc_num = lycees_data.melt(
         id_vars=['uai'],
         value_vars=[
@@ -73,13 +74,13 @@ def lycees_stat_desc_num(lycees_data):
 def lycees_stat_desc_bin(lycees_data):
     df = (
         lycees_data[[
-            'index',
+            'uai',
             'voie_technologique', 'voie_professionnelle',
             'section_arts', 'section_cinema', 'section_theatre', 'section_sport',
             'section_europeenne', 'post_bac'
         ]]
         .melt(
-            id_vars=['index'],
+            id_vars=['uai'],
         )
     )
     df['value'] = pd.to_numeric(df['value'], errors='coerce')
