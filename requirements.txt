@@ -5,3 +5,4 @@ geopandas
 plotnine
 folium
 Ipython
+seaborn
